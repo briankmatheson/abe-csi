@@ -1,0 +1,30 @@
+
+syntax = "proto3";
+package csi;
+
+service Identity {
+  rpc GetPluginInfo(GetPluginInfoRequest) returns (GetPluginInfoResponse) {}
+}
+
+service Controller {
+  rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeResponse) {}
+  rpc DeleteVolume(DeleteVolumeRequest) returns (DeleteVolumeResponse) {}
+}
+
+service Node {
+  rpc NodePublishVolume(NodePublishVolumeRequest) returns (NodePublishVolumeResponse) {}
+  rpc NodeUnpublishVolume(NodeUnpublishVolumeRequest) returns (NodeUnpublishVolumeResponse) {}
+}
+
+message GetPluginInfoRequest {}
+message GetPluginInfoResponse { string name = 1; string vendor_version = 2; }
+
+message CreateVolumeRequest { string name = 1; map<string,string> parameters = 2; }
+message CreateVolumeResponse { string volume_id = 1; }
+message DeleteVolumeRequest { string volume_id = 1; }
+message DeleteVolumeResponse {}
+
+message NodePublishVolumeRequest { string volume_id = 1; string target_path = 2; map<string,string> volume_context = 3; }
+message NodePublishVolumeResponse {}
+message NodeUnpublishVolumeRequest { string volume_id = 1; string target_path = 2; }
+message NodeUnpublishVolumeResponse {}

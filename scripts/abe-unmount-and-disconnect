@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: abe-unmount-and-disconnect <volume_id> <target_path>
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+need_root
+require_cmds nvme mdadm cryptsetup mount
+
+if [[ $# -lt 2 ]]; then echo "usage: $0 <volume_id> <target_path>" >&2; exit 2; fi
+VOL_ID="$1"; TARGET="$2"
+
+if mountpoint -q "$TARGET"; then umount "$TARGET"; fi
+if [[ -e /dev/mapper/abe ]]; then cryptsetup luksClose abe || true; fi
+if [[ -e /dev/md0 ]]; then mdadm --stop /dev/md0 || true; fi
+
+nvme disconnect -n "$VOL_ID" || true
+
+log "unpublished $VOL_ID from $TARGET"

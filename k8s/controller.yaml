@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: abe-csi-controller
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: abe-csi-controller }
+  template:
+    metadata:
+      labels: { app: abe-csi-controller }
+    spec:
+      serviceAccountName: abe-csi
+      containers:
+      - name: controller
+        image: ghcr.io/your-org/abe-csi-rs:latest
+        args: []
+        ports:
+        - containerPort: 50051
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: scripts
+          mountPath: /usr/local/bin
+      volumes:
+      - name: scripts
+        hostPath:
+          path: /usr/local/bin
+          type: Directory

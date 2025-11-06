@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debian-test
+spec:
+  containers:
+  - name: debian
+    image: debian:12-slim
+    command: ["/bin/bash", "-c", "sleep infinity"]
+    volumeMounts:
+    - name: data
+      mountPath: /data
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: postgres-data

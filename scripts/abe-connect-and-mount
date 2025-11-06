@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Usage: abe-connect-and-mount <volume_id> <target_path> [MOUNT_OPTS=...] [HOSTS=h1,h2,h3]
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+need_root
+require_cmds curl jq nvme mdadm cryptsetup blkid mount modprobe
+ensure_dirs
+
+if [[ $# -lt 2 ]]; then echo "usage: $0 <volume_id> <target_path> [MOUNT_OPTS=...] [HOSTS=...]" >&2; exit 2; fi
+VOL_ID="$1"; TARGET="$2"; shift 2
+MOUNT_OPTS=""
+HOSTS_ARG=""
+for kv in "$@"; do
+  case "$kv" in
+    MOUNT_OPTS=*) MOUNT_OPTS="${kv#MOUNT_OPTS=}" ;;
+    HOSTS=*) HOSTS_ARG="${kv#HOSTS=}" ;;
+  esac
+done
+
+mkdir -p "$TARGET"
+
+PLAN_FILE="$ABE_VOL_DIR/$VOL_ID/plan"
+if [[ ! -f "$PLAN_FILE" ]]; then
+  HOSTS=$(resolve_hosts "$HOSTS_ARG") || { echo "Need HOSTS to establish plan for $VOL_ID" >&2; exit 2; }
+  read -r h1 h2 h3 <<<"$HOSTS"
+  [[ -n "$h1" && -n "$h2" && -n "$h3" ]] || { echo "Need exactly three hosts" >&2; exit 2; }
+  PLAN=""
+  for h in $h1 $h2 $h3; do PLAN+="$(configure_host "$h") "; done
+  persist_plan "$VOL_ID" "$PLAN"
+fi
+
+PLAN=$(read_plan "$VOL_ID")
+
+md_devs=()
+for triplet in $PLAN; do
+  host=$(echo "$triplet" | cut -d: -f1)
+  id=$(echo "$triplet" | cut -d: -f3)
+  updated=$(refresh_host "$host" "$id")
+  h=$(echo "$updated" | cut -d: -f1)
+  p=$(echo "$updated" | cut -d: -f2)
+  i=$(echo "$updated" | cut -d: -f3)
+  log "nvme connect -a $h -t tcp -s $p -n $i"
+  nvme connect -a "$h" -t tcp -s "$p" -n "$i"
+  sleep 1
+  dev=$(by_partlabel "$i")
+  if [[ -z "$dev" ]]; then echo "failed to discover device for PARTLABEL=$i" >&2; exit 1; fi
+  md_devs+=("$dev")
+done
+
+if [[ ! -e /dev/md0 ]]; then
+  mdadm --create /dev/md0 --level=1 --raid-devices=3 "${md_devs[@]}"
+fi
+
+if [[ ! -e /dev/mapper/abe ]]; then
+  if ! cryptsetup isLuks /dev/md0 >/dev/null 2>&1; then
+    cryptsetup -y -v luksFormat /dev/md0
+  fi
+  cryptsetup -v luksOpen /dev/md0 abe
+fi
+
+if ! blkid /dev/mapper/abe >/dev/null 2>&1; then
+  mkfs.ext4 /dev/mapper/abe
+fi
+
+mount_opts=("-o" "${MOUNT_OPTS:-defaults}")
+mount "${mount_opts[@]}" /dev/mapper/abe "$TARGET"
+
+log "mounted $VOL_ID at $TARGET"

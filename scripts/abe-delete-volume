@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Usage: abe-delete-volume <volume_id>
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+need_root
+ensure_dirs
+
+if [[ $# -lt 1 ]]; then echo "usage: $0 <volume_id>" >&2; exit 2; fi
+VOL_ID="$1"
+PLAN_FILE="$ABE_VOL_DIR/$VOL_ID/plan"
+
+if [[ ! -f "$PLAN_FILE" ]]; then
+  log "no state for $VOL_ID (nothing to do)"; exit 0
+fi
+
+log "stopping local md/LUKS and disconnecting NVMe for $VOL_ID"
+if mountpoint -q "/var/lib/postgresql"; then umount "/var/lib/postgresql" || true; fi
+if [[ -e /dev/mapper/abe ]]; then cryptsetup luksClose abe || true; fi
+if [[ -e /dev/md0 ]]; then mdadm --stop /dev/md0 || true; fi
+
+for subsys in $(nvme list-subsys 2>/dev/null | awk '/nvme-subsys/ {ss=$2} /NQN/ {print ss, $0}' | awk -v id="$VOL_ID" 'index($0,id)>0 {print $1}'); do
+  nvme disconnect -n "$VOL_ID" || true
+  nvme disconnect -d "$subsys" || true
+done
+
+rm -rf "$ABE_VOL_DIR/$VOL_ID"
+log "deleted local state for $VOL_ID"

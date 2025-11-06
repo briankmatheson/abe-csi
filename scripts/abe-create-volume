@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Usage: abe-create-volume <name> [HOSTS=h1,h2,h3]
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+need_root
+require_cmds curl jq nvme mdadm cryptsetup parted blkid
+ensure_dirs
+
+if [[ $# -lt 1 ]]; then echo "usage: $0 <name> [HOSTS=...]" >&2; exit 2; fi
+VOL_NAME="$1"; shift || true
+HOSTS_ARG=""
+for kv in "$@"; do case "$kv" in HOSTS=*) HOSTS_ARG="${kv#HOSTS=}" ;; esac; done
+
+HOSTS=$(resolve_hosts "$HOSTS_ARG") || { echo "Need HOSTS (three ABE hosts)" >&2; exit 2; }
+
+read -r h1 h2 h3 <<<"$HOSTS"
+if [[ -z "${h1:-}" || -z "${h2:-}" || -z "${h3:-}" ]]; then
+  echo "Need exactly three hosts" >&2; exit 2
+fi
+
+log "configuring volume on $h1 $h2 $h3"
+PLAN=""
+for h in $h1 $h2 $h3; do
+  triplet=$(configure_host "$h") || { echo "host configure failed: $h" >&2; exit 1; }
+  PLAN+="$triplet "
+done
+
+VOL_ID=$(echo "$PLAN" | awk '{print $1}' | tr ':' ' ' | awk '{print $3}')
+
+persist_plan "$VOL_ID" "$PLAN"
+
+echo "$VOL_ID"
