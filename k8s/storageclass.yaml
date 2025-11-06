@@ -4,7 +4,7 @@ metadata:
   name: abe-csi
 provisioner: abe.csi.briankmatheson
 parameters:
-  HOSTS: abe-a,abe-b,abe-c
+  HOSTS: brick,brick,brick
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
 allowVolumeExpansion: true
