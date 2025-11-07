@@ -13,10 +13,10 @@ RUN cargo build --release
 
 # ---- Runtime stage ----
 FROM debian:12-slim
-RUN apt-get update && apt-get install -y bash curl jq nvme-cli mdadm cryptsetup && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y bash curl jq nvme-cli mdadm cryptsetup parted && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /usr/local/bin /var/lib/abe
 COPY --from=builder /build/target/release/abe-csi-rs /usr/local/bin/abe-csi-rs
 COPY scripts/* /usr/local/bin/
 RUN chmod +x /usr/local/bin/*
 EXPOSE 50051
-ENTRYPOINT ["/usr/local/bin/abe-csi-rs"]
+ENTRYPOINT ["/bin/bash", "/usr/local/bin/entrypoint.sh"]

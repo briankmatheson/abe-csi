@@ -19,7 +19,7 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: node
-        image: briankmatheson/abe:latest
+        image: briankmatheson/abe-csi-rs:latest
         securityContext:
           privileged: true
         volumeMounts:
