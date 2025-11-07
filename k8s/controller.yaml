@@ -14,7 +14,8 @@ spec:
       serviceAccountName: abe-csi
       containers:
       - name: controller
-        image: ghcr.io/your-org/abe-csi-rs:latest
+        image: briankmatheson/abe:latest
+        command: /usr/local/bin/abe
         args: []
         ports:
         - containerPort: 50051

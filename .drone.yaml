@@ -11,12 +11,12 @@ steps:
       - apt-get update && apt-get install -y pkg-config libssl-dev protobuf-compiler curl jq
       - cargo build --release
       - mkdir -p dist
-      - cp target/release/abe-csi-rs dist/
+      - cp target/release/abe dist/
 
   - name: build-image
     image: plugins/docker
     settings:
-      repo: registry.example.com/abe-csi-rs
+      repo: harbor.local/abe/abe 
       dockerfile: Dockerfile
       tags:
         - latest
@@ -33,10 +33,10 @@ steps:
         - tag
     commands:
       - apk add --no-cache curl tar gzip
-      - tar czf abe-csi-rs-${DRONE_TAG}.tar.gz dist/
+      - tar czf abe--${DRONE_TAG}.tar.gz dist/
       - curl -u "$GITHUB_USER:$GITHUB_TOKEN" \
         -T abe-csi-rs-${DRONE_TAG}.tar.gz \
-        https://uploads.github.com/repos/${DRONE_REPO}/releases/${DRONE_TAG}/assets?name=abe-csi-rs-${DRONE_TAG}.tar.gz
+        https://uploads.github.com/repos/${DRONE_REPO}/releases/${DRONE_TAG}/assets?name=abe-DRONE_TAG}.tar.gz
 
 trigger:
   event:
