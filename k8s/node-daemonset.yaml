@@ -19,7 +19,9 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: node
-        image: briankmatheson/abe-csi-rs:latest
+        image: briankmatheson/abe:latest
+	command:
+        - /usr/local/bin/abe-csi-rs
         securityContext:
           privileged: true
         volumeMounts:

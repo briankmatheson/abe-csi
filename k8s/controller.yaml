@@ -15,7 +15,7 @@ spec:
       containers:
       - name: controller
         image: briankmatheson/abe:latest
-        command: /usr/local/bin/abe-csi-rs
+        command: [ "/usr/local/bin/abe-csi-rs" ]
         args: []
         ports:
         - containerPort: 50051
