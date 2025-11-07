@@ -10,6 +10,7 @@ impl proto::identity_server::Identity for IdentityService {
         &self,
         _request: Request<proto::GetPluginInfoRequest>,
     ) -> Result<Response<proto::GetPluginInfoResponse>, Status> {
+        tracing::info!("GetPluginInfo called");
         Ok(Response::new(proto::GetPluginInfoResponse {
             name: "abe.csi.briankmatheson".into(),
             vendor_version: env!("CARGO_PKG_VERSION").into(),

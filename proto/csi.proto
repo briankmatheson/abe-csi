@@ -1,16 +1,13 @@
-
 syntax = "proto3";
 package csi;
 
 service Identity {
   rpc GetPluginInfo(GetPluginInfoRequest) returns (GetPluginInfoResponse) {}
 }
-
 service Controller {
   rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeResponse) {}
   rpc DeleteVolume(DeleteVolumeRequest) returns (DeleteVolumeResponse) {}
 }
-
 service Node {
   rpc NodePublishVolume(NodePublishVolumeRequest) returns (NodePublishVolumeResponse) {}
   rpc NodeUnpublishVolume(NodeUnpublishVolumeRequest) returns (NodeUnpublishVolumeResponse) {}

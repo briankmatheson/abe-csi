@@ -12,11 +12,11 @@ impl proto::node_server::Node for NodeService {
         request: Request<proto::NodePublishVolumeRequest>,
     ) -> Result<Response<proto::NodePublishVolumeResponse>, Status> {
         let req = request.into_inner();
-        tracing::info!(volume_id=%req.volume_id, target=%req.target_path, "NodePublishVolume called");
+        tracing::info!("NodePublishVolume called: volume_id={}, target_path={}, context={:?}", req.volume_id, req.target_path, req.volume_context);
 
         let mut cmd = Command::new("/usr/local/bin/abe-connect-and-mount");
         cmd.arg(&req.volume_id).arg(&req.target_path);
-        for (k, v) in req.volume_context {
+        for (k, v) in req.volume_context.clone() {
             cmd.arg(format!("{}={}", k, v));
         }
 
@@ -24,6 +24,8 @@ impl proto::node_server::Node for NodeService {
         if !status.success() {
             return Err(Status::internal("external connect script failed"));
         }
+
+        tracing::info!("NodePublishVolume succeeded for '{}'", req.volume_id);
         Ok(Response::new(proto::NodePublishVolumeResponse {}))
     }
 
@@ -32,7 +34,7 @@ impl proto::node_server::Node for NodeService {
         request: Request<proto::NodeUnpublishVolumeRequest>,
     ) -> Result<Response<proto::NodeUnpublishVolumeResponse>, Status> {
         let req = request.into_inner();
-        tracing::info!(volume_id=%req.volume_id, target=%req.target_path, "NodeUnpublishVolume called");
+        tracing::info!("NodeUnpublishVolume called: volume_id={}, target_path={}", req.volume_id, req.target_path);
 
         let status = Command::new("/usr/local/bin/abe-unmount-and-disconnect")
             .arg(&req.volume_id)
@@ -43,6 +45,8 @@ impl proto::node_server::Node for NodeService {
         if !status.success() {
             return Err(Status::internal("external disconnect script failed"));
         }
+
+        tracing::info!("NodeUnpublishVolume succeeded for '{}'", req.volume_id);
         Ok(Response::new(proto::NodeUnpublishVolumeResponse {}))
     }
 }

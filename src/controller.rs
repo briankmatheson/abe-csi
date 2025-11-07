@@ -12,11 +12,11 @@ impl proto::controller_server::Controller for ControllerService {
         request: Request<proto::CreateVolumeRequest>,
     ) -> Result<Response<proto::CreateVolumeResponse>, Status> {
         let req = request.into_inner();
-        tracing::info!(name = %req.name, "CreateVolume called");
+        tracing::info!("CreateVolume called for '{}', parameters: {:?}", req.name, req.parameters);
 
         let mut cmd = Command::new("/usr/local/bin/abe-create-volume");
         cmd.arg(&req.name);
-        for (k, v) in req.parameters {
+        for (k, v) in req.parameters.clone() {
             cmd.arg(format!("{}={}", k, v));
         }
 
@@ -25,6 +25,7 @@ impl proto::controller_server::Controller for ControllerService {
             return Err(Status::internal("external create script failed"));
         }
 
+        tracing::info!("CreateVolume succeeded for '{}'", req.name);
         Ok(Response::new(proto::CreateVolumeResponse { volume_id: req.name }))
     }
 
@@ -33,7 +34,7 @@ impl proto::controller_server::Controller for ControllerService {
         request: Request<proto::DeleteVolumeRequest>,
     ) -> Result<Response<proto::DeleteVolumeResponse>, Status> {
         let req = request.into_inner();
-        tracing::info!(volume_id = %req.volume_id, "DeleteVolume called");
+        tracing::info!("DeleteVolume called for '{}'", req.volume_id);
 
         let status = Command::new("/usr/local/bin/abe-delete-volume")
             .arg(&req.volume_id)
@@ -44,6 +45,7 @@ impl proto::controller_server::Controller for ControllerService {
             return Err(Status::internal("external delete script failed"));
         }
 
+        tracing::info!("DeleteVolume succeeded for '{}'", req.volume_id);
         Ok(Response::new(proto::DeleteVolumeResponse {}))
     }
 }
