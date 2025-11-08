@@ -18,7 +18,7 @@ spec:
         command: [ "/usr/local/bin/abe-csi-rs" ]
         args: []
         ports:
-        - containerPort: 50051
+        - containerPort: 5051
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

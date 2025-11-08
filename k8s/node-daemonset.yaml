@@ -20,7 +20,7 @@ spec:
       containers:
       - name: node
         image: briankmatheson/abe:latest
-	command:
+        command:
         - /usr/local/bin/abe-csi-rs
         securityContext:
           privileged: true

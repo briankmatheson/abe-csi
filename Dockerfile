@@ -13,7 +13,7 @@ RUN cargo build --release
 
 # ---- Runtime stage ----
 FROM debian:latest
-RUN apt-get update && apt-get install -y bash curl jq nvme-cli mdadm cryptsetup parted libssl3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y bash curl jq nvme-cli mdadm cryptsetup util-linux parted libssl3 strace && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /usr/local/bin /var/lib/abe
 COPY --from=builder /build/target/release/abe-csi-rs /usr/local/bin/abe-csi-rs
 COPY scripts/* /usr/local/bin/
