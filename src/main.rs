@@ -15,7 +15,7 @@ use node::NodeService;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-    let addr: SocketAddr = "0.0.0.0:5051".parse()?;
+    let addr: SocketAddr = "0.0.0.0:50051".parse()?;
     tracing::info!(%addr, "starting abe-csi-rs server");
 
     Server::builder()
