@@ -14,7 +14,7 @@ RUN cargo build --release
 # ---- Runtime stage ----
 WORKDIR /abe
 FROM debian:latest
-RUN apt-get update && apt-get install -y bash curl jq nvme-cli mdadm cryptsetup util-linux parted libssl3 strace libprotobuf-c1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libc6 bash curl jq nvme-cli mdadm cryptsetup util-linux parted libssl3 strace libprotobuf-c1 && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /abe /var/lib/abe
 COPY --from=builder /build/target/release/abe-csi-rs /abe/abe-csi-rs
 COPY scripts/* /abe/
