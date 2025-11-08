@@ -1,10 +1,11 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: postgres-data
+  name: pgdata
 spec:
-  accessModes: [ "ReadWriteOnce" ]
-  storageClassName: abe-csi
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: abe-csi-sc
   resources:
     requests:
-      storage: 10Gi
+      storage: 5Gi

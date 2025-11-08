@@ -1,8 +1,0 @@
-apiVersion: storage.k8s.io/v1
-kind: CSIDriver
-metadata:
-  name: abe.csi.briankmatheson
-spec:
-  attachRequired: false
-  podInfoOnMount: true
-  fsGroupPolicy: File
