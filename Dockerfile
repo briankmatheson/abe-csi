@@ -12,11 +12,12 @@ COPY src ./src
 RUN cargo build --release
 
 # ---- Runtime stage ----
+WORKDIR /abe
 FROM debian:latest
 RUN apt-get update && apt-get install -y bash curl jq nvme-cli mdadm cryptsetup util-linux parted libssl3 strace && rm -rf /var/lib/apt/lists/*
-RUN mkdir -p /usr/local/bin /var/lib/abe
-COPY --from=builder /build/target/release/abe-csi-rs /usr/local/bin/abe-csi-rs
-COPY scripts/* /usr/local/bin/
-RUN chmod +x /usr/local/bin/*
-EXPOSE 50051
+RUN mkdir -p /abe /var/lib/abe
+COPY --from=builder /build/target/release/abe-csi-rs /abe/abe-csi-rs
+COPY scripts/* /abe/
+RUN chmod +x /abe/*
+EXPOSE 5051
 ENTRYPOINT ["/bin/bash", "/usr/local/bin/entrypoint.sh"]
