@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+Apiversion: apps/v1
 kind: Deployment
 metadata:
   name: abe-csi-controller
@@ -18,14 +18,14 @@ spec:
       - name: abe-csi
         image: briankmatheson/abe:latest
         args:
-        - "--endpoint=unix:///csi/csi.sock"
+        - "--endpoint=unix://csi/sock"
         volumeMounts:
         - name: socket-dir
           mountPath: /csi
       - name: csi-provisioner
         image: registry.k8s.io/sig-storage/csi-provisioner:v5.0.1
         args:
-        - "--csi-address=tcp://127.0.0.1:50051"
+        - "--csi-address=unix://csi/sock"
         - "--v=5"
         - "--timeout=60s"
         - "--feature-gates=Topology=true"
@@ -35,13 +35,16 @@ spec:
       - name: csi-attacher
         image: registry.k8s.io/sig-storage/csi-attacher:v4.4.1
         args:
-        - "--csi-address=tcp://127.0.0.1:50051"
+        - "--csi-address=unix://csi/sock"
         env:
-        - name: ADDRESS
+        - name: socket-dir
           value: /csi/csi.sock
         volumeMounts:
         - name: socket-dir
           mountPath: /csi
       volumes:
       - name: socket-dir
-        emptyDir: {}
+        hostPath:
+          path: /var/lib/kubelet/plugins/abe.csi.briankmatheson
+          type: DirectoryOrCreate
+
