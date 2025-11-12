@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: abe-csi-node
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: abe-csi-node
+  template:
+    metadata:
+      labels:
+        app: abe-csi-node
+    spec:
+      serviceAccountName: csi-node-sa
+      hostNetwork: true
+      containers:
+      - name: abe-csi
+        image: briankmatheson/abe:latest
+        args:
+        - "--endpoint=unix://csi/csi.sock"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: plugin-dir
+          mountPath: /csi
+        - name: mountpoint-dir
+          mountPath: /var/lib/kubelet/pods
+          mountPropagation: Bidirectional
+      - name: csi-node-driver-registrar
+        image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
+        args:
+        - "--csi-address=unix://csi/csi.sock"
+        - "--kubelet-registration-path=/var/lib/kubelet/plugins/abe.csi.briankmatheson/csi.sock"
+        env:
+        volumeMounts:
+        - name: registration-dir
+          mountPath: /registration
+      volumes:
+      - name: plugin-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins/abe.csi.briankmatheson
+          type: DirectoryOrCreate
+      - name: registration-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry
+          type: Directory
+      - name: mountpoint-dir
+        hostPath:
+          path: /var/lib/kubelet/pods
+          type: Directory
