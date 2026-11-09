@@ -16,7 +16,7 @@ spec:
       hostNetwork: true
       containers:
       - name: abe-csi
-        image: briankmatheson/abe:latest
+        image: localhost:5000/abe-csi:latest
         args:
         - "--endpoint=unix://csi/csi.sock"
         securityContext:
