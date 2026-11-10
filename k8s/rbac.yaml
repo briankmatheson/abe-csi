@@ -15,9 +15,19 @@ kind: ClusterRole
 metadata:
   name: abe-csi-provisioner-role
 rules:
+# Matches the upstream csi-provisioner v5 ClusterRole (minus snapshot/topology).
 - apiGroups: [""]
-  resources: ["persistentvolumes", "persistentvolumeclaims", "pods"]
-  verbs: ["get", "list", "watch", "create", "delete"]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "create", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: [""]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["list", "watch", "create", "update", "patch"]
 - apiGroups: ["storage.k8s.io"]
   resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
   verbs: ["get", "list", "watch"]

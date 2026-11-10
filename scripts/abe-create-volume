@@ -2,7 +2,8 @@
 # abe-create-volume <name> [KEY=VALUE...]
 #
 # Provision a volume on a single ABE host and print its volume id.
-# Parameters (from the StorageClass): HOSTS=<ip>  (first host is used)
+# Parameters: HOSTS=<ip> (StorageClass; first host is used),
+#             CAPACITY_BYTES=<n> (from the CSI request; 0/absent = ABE default)
 # The host:port:id plan is persisted locally and read back by the CSI
 # controller, which forwards it to nodes via volume_context.
 set -euo pipefail
@@ -17,8 +18,8 @@ parse_kv "$@"
 
 HOST=$(resolve_host) || die "no ABE host: set StorageClass parameter 'hosts' or $ABE_HOSTS_FILE"
 
-log "provisioning '$VOL_NAME' on $HOST"
-PLAN=$(configure_host "$HOST") || die "ABE /configure failed on $HOST"
+log "provisioning '$VOL_NAME' on $HOST (${ABE_PARAM_CAPACITY_BYTES:-default} bytes)"
+PLAN=$(configure_host "$HOST" "${ABE_PARAM_CAPACITY_BYTES:-}") || die "ABE /configure failed on $HOST"
 VOL_ID=${PLAN##*:}
 persist_plan "$VOL_ID" "$PLAN"
 log "provisioned $VOL_ID ($PLAN)"

@@ -35,10 +35,11 @@ spec:
         - name: socket-dir
           mountPath: /csi
       volumes:
+      # Private to this pod: only the provisioner sidecar talks to the
+      # controller socket. Sharing the kubelet plugin dir here would make the
+      # controller and node processes fight over the same csi.sock.
       - name: socket-dir
-        hostPath:
-          path: /var/lib/kubelet/plugins/abe.csi.briankmatheson
-          type: DirectoryOrCreate
+        emptyDir: {}
       - name: abe-state
         hostPath:
           path: /var/lib/abe-csi/controller

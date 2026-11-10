@@ -58,9 +58,12 @@ persist_plan() {
 read_plan() { cat "$ABE_VOL_DIR/$1/plan"; }
 
 # GET http://host/configure -> "host:port:id" (new volume)
+# Optional second arg: requested size in bytes (ABE rounds up to MiB).
 configure_host() {
-  local host="$1" resp port id
-  resp=$(curl --silent --fail --max-time 30 "http://$host/configure") || return 1
+  local host="$1" bytes="${2:-}" resp port id url
+  url="http://$host/configure"
+  [[ -n "$bytes" && "$bytes" != 0 ]] && url="$url?bytes=$bytes"
+  resp=$(curl --silent --fail --max-time 60 "$url") || return 1
   port=$(echo "$resp" | jq -r .port); id=$(echo "$resp" | jq -r .id)
   [[ -n "$port" && -n "$id" && "$port" != null && "$id" != null ]] || return 1
   echo "$host:$port:$id"
@@ -68,6 +71,14 @@ configure_host() {
 
 # GET http://host/id/<id> -> "host:port:id" (re-export existing volume;
 # the port can change across ABE restarts)
+# DELETE http://host/id/<id>: unexport and remove the LV. 404 (already gone)
+# is treated as success.
+delete_host() {
+  local host="$1" id="$2" code
+  code=$(curl --silent --output /dev/null --max-time 60 -w '%{http_code}' -X DELETE "http://$host/id/$id") || return 1
+  [[ "$code" == 200 || "$code" == 404 ]]
+}
+
 refresh_host() {
   local host="$1" id="$2" resp port
   resp=$(curl --silent --fail --max-time 30 "http://$host/id/$id") || return 1

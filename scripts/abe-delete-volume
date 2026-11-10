@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # abe-delete-volume <volume_id>
 #
-# Release a volume. ABE has no delete endpoint yet, so this detaches anything
-# this host still has open and forgets local state; the LV on the ABE host
-# is left in place (TODO: DELETE /id/<id> in abe).
+# Release a volume: detach anything this host still has open, ask the ABE
+# host to unexport and remove the LV (DELETE /id/<id>), forget local state.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need_root
@@ -23,8 +22,10 @@ fi
 
 if [[ -d "$ABE_VOL_DIR/$VOL_ID" ]]; then
   HOST=$(cut -d: -f1 "$ABE_VOL_DIR/$VOL_ID/plan" 2>/dev/null || true)
+  [[ -n "$HOST" ]] || HOST=$(resolve_host) || die "no ABE host for $VOL_ID"
+  delete_host "$HOST" "$VOL_ID" || die "ABE DELETE /id/$VOL_ID failed on $HOST"
   rm -rf "$ABE_VOL_DIR/$VOL_ID"
-  log "released $VOL_ID (LV remains on ${HOST:-ABE host}; no delete API yet)"
+  log "deleted $VOL_ID on $HOST"
 else
   log "no state for $VOL_ID (nothing to do)"
 fi
