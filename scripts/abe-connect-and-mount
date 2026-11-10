@@ -10,16 +10,23 @@ if [[ $# -lt 2 ]]; then echo "usage: $0 <volume_id> <target_path> [MOUNT_OPTS=..
 VOL_ID="$1"; TARGET="$2"; shift 2
 MOUNT_OPTS=""
 HOSTS_ARG=""
+PLAN_ARG=""
 for kv in "$@"; do
   case "$kv" in
     MOUNT_OPTS=*) MOUNT_OPTS="${kv#MOUNT_OPTS=}" ;;
     HOSTS=*) HOSTS_ARG="${kv#HOSTS=}" ;;
+    PLAN=*) PLAN_ARG="${kv#PLAN=}" ;;
   esac
 done
 
 mkdir -p "$TARGET"
 
 PLAN_FILE="$ABE_VOL_DIR/$VOL_ID/plan"
+# The CSI controller passes the plan it recorded at CreateVolume time via
+# volume_context, so the node never has to re-provision targets.
+if [[ ! -f "$PLAN_FILE" && -n "$PLAN_ARG" ]]; then
+  persist_plan "$VOL_ID" "$PLAN_ARG"
+fi
 if [[ ! -f "$PLAN_FILE" ]]; then
   HOSTS=$(resolve_hosts "$HOSTS_ARG") || { echo "Need HOSTS to establish plan for $VOL_ID" >&2; exit 2; }
   read -r h1 h2 h3 <<<"$HOSTS"
