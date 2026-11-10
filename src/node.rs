@@ -66,7 +66,19 @@ impl proto::node_server::Node for NodeService {
             args.push(format!("MOUNT_OPTS={}", mount_opts.join(",")));
         }
 
-        exec::run("abe-connect-and-mount", &args)?;
+        // LUKS passphrase from the node-publish secret (StorageClass
+        // csi.storage.k8s.io/node-publish-secret-name). Piped to the script's
+        // stdin; absent => volume is used unencrypted.
+        let passphrase = ["passphrase", "key", "luks-key"]
+            .iter()
+            .find_map(|k| req.secrets.get(*k))
+            .filter(|s| !s.is_empty())
+            .map(String::as_str);
+        if passphrase.is_some() {
+            tracing::info!("NodePublishVolume {}: LUKS passphrase supplied", req.volume_id);
+        }
+
+        exec::run_with_stdin("abe-connect-and-mount", &args, passphrase)?;
         tracing::info!("NodePublishVolume {} mounted", req.volume_id);
         Ok(Response::new(proto::NodePublishVolumeResponse {}))
     }

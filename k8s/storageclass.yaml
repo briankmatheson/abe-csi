@@ -4,7 +4,14 @@ metadata:
   name: abe-csi-sc
 provisioner: abe.csi.briankmatheson
 parameters:
-  type: ssd
+  # ABE host(s). Single-host mode: the first entry is used.
+  hosts: "10.23.0.136"
+  # LUKS passphrase for volumes of this class. Kubelet reads this Secret and
+  # hands it to NodePublishVolume; the driver pipes `passphrase` to
+  # cryptsetup on stdin. Remove both keys for unencrypted volumes.
+  csi.storage.k8s.io/node-publish-secret-name: abe-luks
+  csi.storage.k8s.io/node-publish-secret-namespace: kube-system
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
-allowVolumeExpansion: true
+# ABE volumes are a fixed 100G today; expansion isn't implemented.
+allowVolumeExpansion: false

@@ -1,27 +1,30 @@
 #!/usr/bin/env bash
-# Usage: abe-delete-volume <volume_id>
+# abe-delete-volume <volume_id>
+#
+# Release a volume. ABE has no delete endpoint yet, so this detaches anything
+# this host still has open and forgets local state; the LV on the ABE host
+# is left in place (TODO: DELETE /id/<id> in abe).
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need_root
 ensure_dirs
 
-if [[ $# -lt 1 ]]; then echo "usage: $0 <volume_id>" >&2; exit 2; fi
+[[ $# -ge 1 ]] || { echo "usage: $0 <volume_id>" >&2; exit 2; }
 VOL_ID="$1"
-PLAN_FILE="$ABE_VOL_DIR/$VOL_ID/plan"
+MAP=$(mapper_name "$VOL_ID")
 
-if [[ ! -f "$PLAN_FILE" ]]; then
-  log "no state for $VOL_ID (nothing to do)"; exit 0
+if [[ -e "/dev/mapper/$MAP" ]]; then
+  for mp in $(findmnt -S "/dev/mapper/$MAP" -n -o TARGET 2>/dev/null); do umount "$mp" || true; done
+  cryptsetup close "$MAP" || true
+fi
+if command -v nvme >/dev/null 2>&1 && is_connected "$VOL_ID"; then
+  nvme disconnect -n "$VOL_ID" >/dev/null || true
 fi
 
-log "stopping local md/LUKS and disconnecting NVMe for $VOL_ID"
-if mountpoint -q "/var/lib/postgresql"; then umount "/var/lib/postgresql" || true; fi
-if [[ -e /dev/mapper/abe ]]; then cryptsetup luksClose abe || true; fi
-if [[ -e /dev/md0 ]]; then mdadm --stop /dev/md0 || true; fi
-
-for subsys in $(nvme list-subsys 2>/dev/null | awk '/nvme-subsys/ {ss=$2} /NQN/ {print ss, $0}' | awk -v id="$VOL_ID" 'index($0,id)>0 {print $1}'); do
-  nvme disconnect -n "$VOL_ID" || true
-  nvme disconnect -d "$subsys" || true
-done
-
-rm -rf "$ABE_VOL_DIR/$VOL_ID"
-log "deleted local state for $VOL_ID"
+if [[ -d "$ABE_VOL_DIR/$VOL_ID" ]]; then
+  HOST=$(cut -d: -f1 "$ABE_VOL_DIR/$VOL_ID/plan" 2>/dev/null || true)
+  rm -rf "$ABE_VOL_DIR/$VOL_ID"
+  log "released $VOL_ID (LV remains on ${HOST:-ABE host}; no delete API yet)"
+else
+  log "no state for $VOL_ID (nothing to do)"
+fi

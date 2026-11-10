@@ -1,75 +1,91 @@
 #!/usr/bin/env bash
-# Usage: abe-connect-and-mount <volume_id> <target_path> [MOUNT_OPTS=...] [HOSTS=h1,h2,h3]
+# abe-connect-and-mount <volume_id> <target_path> [KEY=VALUE...]
+#
+# Attach an ABE volume over NVMe/TCP, optionally unlock it with LUKS, make a
+# filesystem on first use, and mount it at <target_path>.
+#
+#   PLAN=host:port:id   from volume_context (set by CreateVolume)
+#   HOSTS=ip            fallback if no plan is known yet
+#   FS_TYPE=ext4        filesystem to create on first use (default ext4)
+#   MOUNT_OPTS=a,b      mount -o options
+#
+# LUKS passphrase: when ABE_LUKS_KEY_STDIN=1 the passphrase is read from
+# stdin (the CSI driver pipes the node-publish secret in). It is never
+# placed in argv or the environment. Without a passphrase the volume is
+# used unencrypted.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need_root
-require_cmds curl jq nvme mdadm cryptsetup blkid mount modprobe
+require_cmds curl jq nvme cryptsetup blkid mount findmnt mkfs.ext4
 ensure_dirs
 
-if [[ $# -lt 2 ]]; then echo "usage: $0 <volume_id> <target_path> [MOUNT_OPTS=...] [HOSTS=...]" >&2; exit 2; fi
+[[ $# -ge 2 ]] || { echo "usage: $0 <volume_id> <target_path> [KEY=VALUE...]" >&2; exit 2; }
 VOL_ID="$1"; TARGET="$2"; shift 2
-MOUNT_OPTS=""
-HOSTS_ARG=""
-PLAN_ARG=""
-for kv in "$@"; do
-  case "$kv" in
-    MOUNT_OPTS=*) MOUNT_OPTS="${kv#MOUNT_OPTS=}" ;;
-    HOSTS=*) HOSTS_ARG="${kv#HOSTS=}" ;;
-    PLAN=*) PLAN_ARG="${kv#PLAN=}" ;;
-  esac
-done
+parse_kv "$@"
+FS_TYPE=${ABE_PARAM_FS_TYPE:-ext4}
+MOUNT_OPTS=${ABE_PARAM_MOUNT_OPTS:-defaults}
+
+LUKS_KEY=""
+if [[ "${ABE_LUKS_KEY_STDIN:-0}" == "1" ]]; then
+  LUKS_KEY=$(cat)
+fi
 
 mkdir -p "$TARGET"
+if findmnt -M "$TARGET" >/dev/null 2>&1; then
+  log "$TARGET already mounted"; exit 0
+fi
 
+# --- plan -----------------------------------------------------------------
 PLAN_FILE="$ABE_VOL_DIR/$VOL_ID/plan"
-# The CSI controller passes the plan it recorded at CreateVolume time via
-# volume_context, so the node never has to re-provision targets.
-if [[ ! -f "$PLAN_FILE" && -n "$PLAN_ARG" ]]; then
-  persist_plan "$VOL_ID" "$PLAN_ARG"
+if [[ ! -f "$PLAN_FILE" && -n "${ABE_PARAM_PLAN:-}" ]]; then
+  persist_plan "$VOL_ID" "$ABE_PARAM_PLAN"
 fi
 if [[ ! -f "$PLAN_FILE" ]]; then
-  HOSTS=$(resolve_hosts "$HOSTS_ARG") || { echo "Need HOSTS to establish plan for $VOL_ID" >&2; exit 2; }
-  read -r h1 h2 h3 <<<"$HOSTS"
-  [[ -n "$h1" && -n "$h2" && -n "$h3" ]] || { echo "Need exactly three hosts" >&2; exit 2; }
-  PLAN=""
-  for h in $h1 $h2 $h3; do PLAN+="$(configure_host "$h") "; done
-  persist_plan "$VOL_ID" "$PLAN"
+  HOST=$(resolve_host) || die "no plan for $VOL_ID and no ABE host to ask"
+  persist_plan "$VOL_ID" "$HOST::$VOL_ID"
 fi
-
 PLAN=$(read_plan "$VOL_ID")
+HOST=$(echo "$PLAN" | cut -d: -f1)
 
-md_devs=()
-for triplet in $PLAN; do
-  host=$(echo "$triplet" | cut -d: -f1)
-  id=$(echo "$triplet" | cut -d: -f3)
-  updated=$(refresh_host "$host" "$id")
-  h=$(echo "$updated" | cut -d: -f1)
-  p=$(echo "$updated" | cut -d: -f2)
-  i=$(echo "$updated" | cut -d: -f3)
-  log "nvme connect -a $h -t tcp -s $p -n $i"
-  nvme connect -a "$h" -t tcp -s "$p" -n "$i"
-  sleep 1
-  dev=$(by_partlabel "$i")
-  if [[ -z "$dev" ]]; then echo "failed to discover device for PARTLABEL=$i" >&2; exit 1; fi
-  md_devs+=("$dev")
-done
-
-if [[ ! -e /dev/md0 ]]; then
-  mdadm --create /dev/md0 --level=1 --raid-devices=3 "${md_devs[@]}"
+# --- attach ---------------------------------------------------------------
+if ! is_connected "$VOL_ID"; then
+  ensure_nvme_tcp
+  # Ask ABE to (re)export; the port may have changed since provisioning.
+  PLAN=$(refresh_host "$HOST" "$VOL_ID") || die "ABE /id/$VOL_ID failed on $HOST"
+  persist_plan "$VOL_ID" "$PLAN"
+  PORT=$(echo "$PLAN" | cut -d: -f2)
+  log "nvme connect -a $HOST -t tcp -s $PORT -n $VOL_ID"
+  nvme connect -a "$HOST" -t tcp -s "$PORT" -n "$VOL_ID"
 fi
+DEV=$(wait_device "$VOL_ID") || die "device for $VOL_ID did not appear"
+log "attached $VOL_ID as $DEV"
 
-if [[ ! -e /dev/mapper/abe ]]; then
-  if ! cryptsetup isLuks /dev/md0 >/dev/null 2>&1; then
-    cryptsetup -y -v luksFormat /dev/md0
+# --- encryption -----------------------------------------------------------
+SRC="$DEV"
+if [[ -n "$LUKS_KEY" ]]; then
+  MAP=$(mapper_name "$VOL_ID")
+  if [[ ! -e "/dev/mapper/$MAP" ]]; then
+    if ! cryptsetup isLuks "$DEV" >/dev/null 2>&1; then
+      existing_type=$(blkid -p -o value -s TYPE "$DEV" 2>/dev/null || true)
+      if [[ -n "$existing_type" ]]; then
+        die "$DEV already has a $existing_type signature but is not LUKS; refusing to format"
+      fi
+      log "luksFormat $DEV"
+      printf '%s' "$LUKS_KEY" | cryptsetup -q luksFormat --type luks2 --key-file=- "$DEV"
+    fi
+    log "luksOpen $DEV -> $MAP"
+    printf '%s' "$LUKS_KEY" | cryptsetup open --key-file=- "$DEV" "$MAP"
   fi
-  cryptsetup -v luksOpen /dev/md0 abe
+  SRC="/dev/mapper/$MAP"
+elif cryptsetup isLuks "$DEV" >/dev/null 2>&1; then
+  die "$DEV is LUKS but no passphrase was supplied (set node-publish secret on the StorageClass)"
 fi
 
-if ! blkid /dev/mapper/abe >/dev/null 2>&1; then
-  mkfs.ext4 /dev/mapper/abe
+# --- filesystem -----------------------------------------------------------
+if ! blkid -p -o value -s TYPE "$SRC" >/dev/null 2>&1 || [[ -z "$(blkid -p -o value -s TYPE "$SRC" 2>/dev/null)" ]]; then
+  log "mkfs.$FS_TYPE $SRC"
+  "mkfs.$FS_TYPE" -q "$SRC"
 fi
 
-mount_opts=("-o" "${MOUNT_OPTS:-defaults}")
-mount "${mount_opts[@]}" /dev/mapper/abe "$TARGET"
-
-log "mounted $VOL_ID at $TARGET"
+mount -o "$MOUNT_OPTS" "$SRC" "$TARGET"
+log "mounted $VOL_ID ($SRC) at $TARGET"

@@ -1,32 +1,25 @@
 #!/usr/bin/env bash
-# Usage: abe-create-volume <name> [HOSTS=h1,h2,h3]
+# abe-create-volume <name> [KEY=VALUE...]
+#
+# Provision a volume on a single ABE host and print its volume id.
+# Parameters (from the StorageClass): HOSTS=<ip>  (first host is used)
+# The host:port:id plan is persisted locally and read back by the CSI
+# controller, which forwards it to nodes via volume_context.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need_root
-require_cmds curl jq nvme mdadm cryptsetup parted blkid
+require_cmds curl jq
 ensure_dirs
 
-if [[ $# -lt 1 ]]; then echo "usage: $0 <name> [HOSTS=...]" >&2; exit 2; fi
+[[ $# -ge 1 ]] || { echo "usage: $0 <name> [HOSTS=ip]" >&2; exit 2; }
 VOL_NAME="$1"; shift || true
-HOSTS_ARG=""
-for kv in "$@"; do case "$kv" in HOSTS=*) HOSTS_ARG="${kv#HOSTS=}" ;; esac; done
+parse_kv "$@"
 
-HOSTS=$(resolve_hosts "$HOSTS_ARG") || { echo "Need HOSTS (three ABE hosts)" >&2; exit 2; }
+HOST=$(resolve_host) || die "no ABE host: set StorageClass parameter 'hosts' or $ABE_HOSTS_FILE"
 
-read -r h1 h2 h3 <<<"$HOSTS"
-if [[ -z "${h1:-}" || -z "${h2:-}" || -z "${h3:-}" ]]; then
-  echo "Need exactly three hosts" >&2; exit 2
-fi
-
-log "configuring volume on $h1 $h2 $h3"
-PLAN=""
-for h in $h1 $h2 $h3; do
-  triplet=$(configure_host "$h") || { echo "host configure failed: $h" >&2; exit 1; }
-  PLAN+="$triplet "
-done
-
-VOL_ID=$(echo "$PLAN" | awk '{print $1}' | tr ':' ' ' | awk '{print $3}')
-
+log "provisioning '$VOL_NAME' on $HOST"
+PLAN=$(configure_host "$HOST") || die "ABE /configure failed on $HOST"
+VOL_ID=${PLAN##*:}
 persist_plan "$VOL_ID" "$PLAN"
-
+log "provisioned $VOL_ID ($PLAN)"
 echo "$VOL_ID"

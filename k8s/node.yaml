@@ -34,6 +34,9 @@ spec:
           mountPropagation: Bidirectional
         - name: dev
           mountPath: /dev
+        - name: modules
+          mountPath: /lib/modules
+          readOnly: true
         - name: abe-state
           mountPath: /var/lib/abe
       - name: csi-node-driver-registrar
@@ -62,6 +65,9 @@ spec:
       - name: dev
         hostPath:
           path: /dev
+      - name: modules
+        hostPath:
+          path: /lib/modules
       - name: abe-state
         hostPath:
           path: /var/lib/abe-csi/node

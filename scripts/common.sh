@@ -1,82 +1,125 @@
 #!/usr/bin/env bash
+# Shared helpers for the abe-csi node/controller scripts.
 set -euo pipefail
 
 ABE_STATE_DIR=${ABE_STATE_DIR:-/var/lib/abe}
 ABE_VOL_DIR="$ABE_STATE_DIR/volumes"
 ABE_HOSTS_FILE=${ABE_HOSTS_FILE:-/etc/abe/hosts}
 
+# libdevmapper waits for a udev cookie after creating a mapping; inside a
+# container the host's udev never acknowledges it and cryptsetup hangs.
+# Let libdm create the nodes itself (/dev is the host's, bind-mounted).
+export DM_DISABLE_UDEV=1
+
 log() { echo "[abe][$(date +%H:%M:%S)] $*" >&2; }
+die() { log "$*"; exit 1; }
 
 need_root() {
-  if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-    echo "must run as root" >&2
-    exit 4
-  fi
+  if [[ ${EUID:-$(id -u)} -ne 0 ]]; then die "must run as root"; fi
 }
 
 require_cmds() {
   local missing=0
   for c in "$@"; do
-    if ! command -v "$c" >/dev/null 2>&1; then log "missing dependency: $c"; missing=1; fi
+    command -v "$c" >/dev/null 2>&1 || { log "missing dependency: $c"; missing=1; }
   done
-  if [[ $missing -eq 1 ]]; then
-    log "install dependencies then retry"; exit 1
-  fi
+  [[ $missing -eq 0 ]] || die "install dependencies then retry"
 }
 
-ensure_dirs() {
-  mkdir -p "$ABE_VOL_DIR"
+ensure_dirs() { mkdir -p "$ABE_VOL_DIR"; }
+
+# Parse KEY=VALUE args into shell variables ABE_PARAM_<KEY>. Keys are
+# upper-cased so StorageClass parameters may be written in lower case.
+parse_kv() {
+  local kv k v
+  for kv in "$@"; do
+    [[ "$kv" == *=* ]] || continue
+    k=${kv%%=*}; v=${kv#*=}
+    k=$(echo "$k" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9_\n' '_')
+    printf -v "ABE_PARAM_$k" '%s' "$v"
+  done
 }
 
-resolve_hosts() {
-  local arg_hosts=${1:-}
-  if [[ -n "$arg_hosts" ]]; then
-    echo "$arg_hosts" | tr ',;' ' '
-    return 0
-  fi
-  if [[ -f "$ABE_HOSTS_FILE" ]]; then
-    tr ',;' ' ' < "$ABE_HOSTS_FILE"
-    return 0
-  fi
-  echo ""; return 1
+# The single ABE host to use: HOSTS/hosts param, else /etc/abe/hosts.
+# Accepts a comma/space list for forward compatibility; uses the first.
+resolve_host() {
+  local raw=${ABE_PARAM_HOSTS:-${ABE_PARAM_HOST:-}}
+  if [[ -z "$raw" && -f "$ABE_HOSTS_FILE" ]]; then raw=$(cat "$ABE_HOSTS_FILE"); fi
+  raw=$(echo "$raw" | tr ',;' '  ' | awk '{print $1}')
+  [[ -n "$raw" ]] || return 1
+  echo "$raw"
 }
 
 persist_plan() {
   local id="$1"; shift
-  local plan="$*"
   mkdir -p "$ABE_VOL_DIR/$id"
-  echo "$plan" > "$ABE_VOL_DIR/$id/plan"
+  echo "$*" > "$ABE_VOL_DIR/$id/plan"
 }
+read_plan() { cat "$ABE_VOL_DIR/$1/plan"; }
 
-read_plan() {
-  local id="$1"
-  cat "$ABE_VOL_DIR/$id/plan"
-}
-
+# GET http://host/configure -> "host:port:id" (new volume)
 configure_host() {
-  local host="$1"
-  local url="http://$host/configure"
-  local resp
-  resp=$(curl --silent --fail "$url")
-  local port id
-  port=$(echo "$resp" | jq -r .port)
-  id=$(echo "$resp" | jq -r .id)
-  if [[ -z "$port" || -z "$id" || "$port" == "null" || "$id" == "null" ]]; then
-    echo ""; return 1
-  fi
+  local host="$1" resp port id
+  resp=$(curl --silent --fail --max-time 30 "http://$host/configure") || return 1
+  port=$(echo "$resp" | jq -r .port); id=$(echo "$resp" | jq -r .id)
+  [[ -n "$port" && -n "$id" && "$port" != null && "$id" != null ]] || return 1
   echo "$host:$port:$id"
 }
 
+# GET http://host/id/<id> -> "host:port:id" (re-export existing volume;
+# the port can change across ABE restarts)
 refresh_host() {
-  local host="$1" id="$2"
-  local url="http://$host/id/$id"
-  local resp port
-  resp=$(curl --silent --fail "$url")
+  local host="$1" id="$2" resp port
+  resp=$(curl --silent --fail --max-time 30 "http://$host/id/$id") || return 1
   port=$(echo "$resp" | jq -r .port)
+  [[ -n "$port" && "$port" != null ]] || return 1
   echo "$host:$port:$id"
 }
 
-by_partlabel() {
-  local pl="$1"
-  /sbin/blkid -t "PARTLABEL=$pl" | awk -F: '{print $1}'
+# Block device for an attached ABE volume. ABE labels the single GPT
+# partition with the volume id; fall back to walking sysfs by NQN.
+find_device() {
+  local id="$1" dev ctrl
+  dev=$(blkid -t "PARTLABEL=$id" -o device 2>/dev/null | head -n1 || true)
+  if [[ -n "$dev" ]]; then echo "$dev"; return 0; fi
+  for ctrl in /sys/class/nvme/nvme*; do
+    [[ -r "$ctrl/subsysnqn" ]] || continue
+    if [[ "$(cat "$ctrl/subsysnqn")" == "$id" ]]; then
+      local ns
+      ns=$(ls -d "$ctrl"/nvme*n1 2>/dev/null | head -n1 || true)
+      [[ -n "$ns" ]] || continue
+      ns=/dev/$(basename "$ns")
+      if [[ -b "${ns}p1" ]]; then echo "${ns}p1"; else echo "$ns"; fi
+      return 0
+    fi
+  done
+  return 1
 }
+
+# Wait for the device to appear after nvme connect (udev + partition scan).
+wait_device() {
+  local id="$1" tries=${2:-20} dev
+  for ((n=0; n<tries; n++)); do
+    if dev=$(find_device "$id") && [[ -b "$dev" ]]; then echo "$dev"; return 0; fi
+    sleep 0.5
+  done
+  return 1
+}
+
+# Load the NVMe/TCP initiator. Needs the host's /lib/modules mounted.
+ensure_nvme_tcp() {
+  [[ -e /dev/nvme-fabrics ]] && return 0
+  modprobe nvme-tcp 2>/dev/null || modprobe nvme_tcp 2>/dev/null || true
+  for _ in 1 2 3 4 5; do [[ -e /dev/nvme-fabrics ]] && return 0; sleep 0.2; done
+  die "/dev/nvme-fabrics missing: nvme-tcp module not loaded (is /lib/modules mounted into the pod?)"
+}
+
+is_connected() {
+  local id="$1" ctrl
+  for ctrl in /sys/class/nvme/nvme*; do
+    [[ -r "$ctrl/subsysnqn" ]] && [[ "$(cat "$ctrl/subsysnqn")" == "$id" ]] && return 0
+  done
+  return 1
+}
+
+mapper_name() { echo "abe-$1"; }
