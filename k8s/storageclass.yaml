@@ -13,5 +13,5 @@ parameters:
   csi.storage.k8s.io/node-publish-secret-namespace: kube-system
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
-# ABE volumes are a fixed 100G today; expansion isn't implemented.
+# Expansion isn't implemented.
 allowVolumeExpansion: false

@@ -9,6 +9,7 @@ mod csi {
 mod controller;
 mod exec;
 mod identity;
+mod k8s;
 mod node;
 
 use controller::ControllerService;

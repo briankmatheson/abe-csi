@@ -59,13 +59,23 @@ read_plan() { cat "$ABE_VOL_DIR/$1/plan"; }
 
 # GET http://host/configure -> "host:port:id" (new volume)
 # Optional second arg: requested size in bytes (ABE rounds up to MiB).
+# ABE >= 0.3.1 also returns `perf` (a short fio write test of the new LV);
+# just that object is kept as $ABE_VOL_DIR/<id>/perf for the CSI controller
+# to put on the PersistentVolume as annotations.
+# ABE runs fio for ABE_FIO_SECONDS before replying, so allow for it.
 configure_host() {
-  local host="$1" bytes="${2:-}" resp port id url
+  local host="$1" bytes="${2:-}" resp port id url perf
   url="http://$host/configure"
   [[ -n "$bytes" && "$bytes" != 0 ]] && url="$url?bytes=$bytes"
-  resp=$(curl --silent --fail --max-time 60 "$url") || return 1
+  resp=$(curl --silent --fail --max-time 120 "$url") || return 1
   port=$(echo "$resp" | jq -r .port); id=$(echo "$resp" | jq -r .id)
   [[ -n "$port" && -n "$id" && "$port" != null && "$id" != null ]] || return 1
+  perf=$(echo "$resp" | jq -c '.perf // empty')
+  if [[ -n "$perf" ]]; then
+    mkdir -p "$ABE_VOL_DIR/$id"
+    echo "$perf" > "$ABE_VOL_DIR/$id/perf"
+    log "perf for $id: $(echo "$perf" | jq -r '"\(.write_mib_s) MiB/s, \(.write_iops) IOPS, \(.write_lat_ms) ms at bs=\(.bs)"')"
+  fi
   echo "$host:$port:$id"
 }
 

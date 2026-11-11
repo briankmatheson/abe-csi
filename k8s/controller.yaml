@@ -29,7 +29,9 @@ spec:
         args:
         - "--csi-address=unix:///csi/csi.sock"
         - "--v=5"
-        - "--timeout=60s"
+        # Covers ABE's fio characterization (ABE_FIO_SECONDS, default 5s)
+        # on top of lvcreate/export.
+        - "--timeout=120s"
         - "--feature-gates=Topology=true"
         volumeMounts:
         - name: socket-dir

@@ -33,6 +33,32 @@ Omit the secret parameters for unencrypted volumes. A LUKS volume published
 without a passphrase, or a non-LUKS volume with data published *with* one,
 is refused rather than guessed at.
 
+## Performance annotations
+
+ABE (>= 0.3.1) runs a short `fio` write test on every volume it creates and
+returns the numbers in its `/configure` reply. `abe-create-volume` keeps
+just that `perf` object (`volumes/<id>/perf`), and the controller writes it
+onto the PersistentVolume as annotations once the provisioner has created
+it:
+
+```
+abe.csi.briankmatheson/fio-bs: "4M"
+abe.csi.briankmatheson/fio-seconds: "5"
+abe.csi.briankmatheson/write-mib-s: "412.5"
+abe.csi.briankmatheson/write-iops: "103.12"
+abe.csi.briankmatheson/write-lat-ms: "77.3"
+```
+
+```sh
+kubectl get pv -o custom-columns='PV:.metadata.name,MiB/s:.metadata.annotations.abe\.csi\.briankmatheson/write-mib-s,IOPS:.metadata.annotations.abe\.csi\.briankmatheson/write-iops'
+```
+
+The PV is named after the CSI `CreateVolume` name, so the controller polls
+for it (up to 10 minutes, backing off to 10s) and merge-patches only those
+keys; it checks `spec.csi.volumeHandle` first. If the ABE host has no
+`fio` or `ABE_FIO_SECONDS=0`, there is no `perf` and nothing is annotated.
+The provisioner's `--timeout` is 120s to leave room for the fio run.
+
 ## Deploy
 
 ```sh
@@ -45,10 +71,7 @@ kubectl apply -f k8s/pvc.yaml -f k8s/debian-pod.yaml
 
 ## Known limits
 
-- ABE volumes are a fixed 100G (`VOL_SIZE` in abe); the PVC size is recorded
-  but not enforced.
-- ABE has no delete endpoint; `DeleteVolume` releases the client side and
-  leaves the LV on the host.
+- No volume expansion (`allowVolumeExpansion: false`).
 - No `NodeStageVolume`: several pods on one node share the mount via
   repeated `NodePublishVolume`; the connection is dropped when the last one
   unpublishes.

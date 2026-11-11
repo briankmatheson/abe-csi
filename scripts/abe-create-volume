@@ -5,7 +5,9 @@
 # Parameters: HOSTS=<ip> (StorageClass; first host is used),
 #             CAPACITY_BYTES=<n> (from the CSI request; 0/absent = ABE default)
 # The host:port:id plan is persisted locally and read back by the CSI
-# controller, which forwards it to nodes via volume_context.
+# controller, which forwards it to nodes via volume_context. ABE's fio
+# numbers (if any) land in volumes/<id>/perf for the controller to annotate
+# the PV with.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need_root

@@ -1,7 +1,10 @@
 use crate::csi as proto;
 use crate::exec;
-use std::collections::HashMap;
+use crate::identity::DRIVER_NAME;
+use crate::k8s;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
+use std::time::Duration;
 use tonic::{Request, Response, Status};
 
 /// Where the scripts keep per-volume state (`$ABE_STATE_DIR/volumes/<id>/plan`).
@@ -18,6 +21,37 @@ struct Provisioned {
     volume_id: String,
     plan: String,
     capacity_bytes: i64,
+}
+
+/// The `perf` object in ABE's `/configure` reply: a short fio write test
+/// run on the new LV before it was handed to us.
+#[derive(Clone, Debug, PartialEq, serde::Deserialize)]
+pub struct Perf {
+    pub bs: String,
+    pub seconds: f64,
+    pub write_mib_s: f64,
+    pub write_iops: f64,
+    pub write_lat_ms: f64,
+}
+
+impl Perf {
+    /// Only the numbers, keyed under the driver name.
+    pub fn annotations(&self) -> BTreeMap<String, String> {
+        let k = |s: &str| format!("{}/{}", DRIVER_NAME, s);
+        BTreeMap::from([
+            (k("fio-bs"), self.bs.clone()),
+            (k("fio-seconds"), fmt_num(self.seconds)),
+            (k("write-mib-s"), fmt_num(self.write_mib_s)),
+            (k("write-iops"), fmt_num(self.write_iops)),
+            (k("write-lat-ms"), fmt_num(self.write_lat_ms)),
+        ])
+    }
+}
+
+/// Up to two decimals, no trailing zeros ("412", "77.3", "0.25").
+fn fmt_num(v: f64) -> String {
+    let s = format!("{:.2}", v);
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 #[derive(Default)]
@@ -81,6 +115,39 @@ impl ControllerService {
             .map(|s| s.trim().to_string())
     }
 
+    /// ABE's fio characterization of a freshly created volume, saved by
+    /// abe-create-volume as `$ABE_STATE_DIR/volumes/<id>/perf`.
+    fn read_perf(volume_id: &str) -> Option<Perf> {
+        let body = std::fs::read_to_string(format!("{}/volumes/{}/perf", state_dir(), volume_id)).ok()?;
+        match serde_json::from_str::<Perf>(&body) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                tracing::warn!("perf for {} is not parseable ({}): {}", volume_id, e, body.trim());
+                None
+            }
+        }
+    }
+
+    /// Put ABE's perf numbers on the PV as annotations. The PV is created by
+    /// the provisioner *after* CreateVolume returns (named after the request),
+    /// so this runs in the background and waits for it.
+    fn annotate_pv(pv_name: &str, volume_id: &str, perf: &Perf) {
+        let client = match k8s::Client::in_cluster() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("not annotating pv/{}: {}", pv_name, e);
+                return;
+            }
+        };
+        tokio::spawn(k8s::annotate_pv_when_created(
+            client,
+            pv_name.to_string(),
+            volume_id.to_string(),
+            perf.annotations(),
+            Duration::from_secs(600),
+        ));
+    }
+
     fn volume_response(name: &str, p: &Provisioned) -> proto::CreateVolumeResponse {
         let mut ctx = HashMap::new();
         ctx.insert("name".to_string(), name.to_string());
@@ -119,13 +186,17 @@ impl proto::controller_server::Controller for ControllerService {
             .map(|r| r.required_bytes)
             .unwrap_or(0);
 
-        // Idempotent replay.
+        // Idempotent replay. Re-arm the annotator too: the PV may not have
+        // existed when the first attempt's annotator ran.
         if let Some(existing) = self.recall(&req.name) {
             tracing::info!(
                 "CreateVolume '{}' already provisioned as {}",
                 req.name,
                 existing.volume_id
             );
+            if let Some(perf) = Self::read_perf(&existing.volume_id) {
+                Self::annotate_pv(&req.name, &existing.volume_id, &perf);
+            }
             return Ok(Response::new(Self::volume_response(&req.name, &existing)));
         }
 
@@ -157,6 +228,10 @@ impl proto::controller_server::Controller for ControllerService {
         self.remember(&req.name, &p);
 
         tracing::info!("CreateVolume '{}' -> {}", req.name, p.volume_id);
+        match Self::read_perf(&p.volume_id) {
+            Some(perf) => Self::annotate_pv(&req.name, &p.volume_id, &perf),
+            None => tracing::info!("no perf data for {} (fio off or missing on the ABE host)", p.volume_id),
+        }
         Ok(Response::new(Self::volume_response(&req.name, &p)))
     }
 
@@ -283,5 +358,32 @@ impl proto::controller_server::Controller for ControllerService {
         _r: Request<proto::ControllerModifyVolumeRequest>,
     ) -> Result<Response<proto::ControllerModifyVolumeResponse>, Status> {
         unimplemented("ControllerModifyVolume")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn perf_becomes_number_only_annotations() {
+        let perf: Perf = serde_json::from_str(
+            r#"{"bs":"4M","seconds":5.0,"write_mib_s":412.5,"write_iops":103.12,"write_lat_ms":77.3}"#,
+        )
+        .unwrap();
+        let a = perf.annotations();
+        assert_eq!(a["abe.csi.briankmatheson/fio-bs"], "4M");
+        assert_eq!(a["abe.csi.briankmatheson/fio-seconds"], "5");
+        assert_eq!(a["abe.csi.briankmatheson/write-mib-s"], "412.5");
+        assert_eq!(a["abe.csi.briankmatheson/write-iops"], "103.12");
+        assert_eq!(a["abe.csi.briankmatheson/write-lat-ms"], "77.3");
+        assert_eq!(a.len(), 5);
+    }
+
+    #[test]
+    fn fmt_num_trims() {
+        assert_eq!(fmt_num(412.0), "412");
+        assert_eq!(fmt_num(0.254), "0.25");
+        assert_eq!(fmt_num(100.10), "100.1");
     }
 }
