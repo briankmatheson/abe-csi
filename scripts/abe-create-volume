@@ -1,28 +1,37 @@
 #!/usr/bin/env bash
 # abe-create-volume <name> [KEY=VALUE...]
 #
-# Provision a volume on a single ABE host and print its volume id.
-# Parameters: HOSTS=<ip> (StorageClass; first host is used),
-#             CAPACITY_BYTES=<n> (from the CSI request; 0/absent = ABE default)
-# The host:port:id plan is persisted locally and read back by the CSI
-# controller, which forwards it to nodes via volume_context. ABE's fio
-# numbers (if any) land in volumes/<id>/perf for the controller to annotate
-# the PV with.
+# Ask xdebbied for a volume (POST /v1/volumes); it does ABE /configure on a
+# healthy host's ABE. Prints the Volume record as JSON: the controller reads
+# id, bytes and perf from it. Idempotent on name (a replay gets the same
+# volume back), so no local state is kept.
+#
+# Parameters: CAPACITY_BYTES=<n> (from the CSI request; 0/absent = 1 GiB),
+#             HOST=<name> (StorageClass; which host's ABE, default any).
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need_root
 require_cmds curl jq
-ensure_dirs
 
-[[ $# -ge 1 ]] || { echo "usage: $0 <name> [HOSTS=ip]" >&2; exit 2; }
+[[ $# -ge 1 ]] || { echo "usage: $0 <name> [KEY=VALUE...]" >&2; exit 2; }
 VOL_NAME="$1"; shift || true
 parse_kv "$@"
 
-HOST=$(resolve_host) || die "no ABE host: set StorageClass parameter 'hosts' or $ABE_HOSTS_FILE"
+BYTES=${ABE_PARAM_CAPACITY_BYTES:-0}
+[[ "$BYTES" -gt 0 ]] || BYTES=$((1 << 30))
+BODY=$(jq -nc --arg n "$VOL_NAME" --argjson b "$BYTES" --arg h "${ABE_PARAM_HOST:-}" \
+  '{name: $n, bytes: $b} + (if $h != "" then {host: $h} else {} end)')
 
-log "provisioning '$VOL_NAME' on $HOST (${ABE_PARAM_CAPACITY_BYTES:-default} bytes)"
-PLAN=$(configure_host "$HOST" "${ABE_PARAM_CAPACITY_BYTES:-}") || die "ABE /configure failed on $HOST"
-VOL_ID=${PLAN##*:}
-persist_plan "$VOL_ID" "$PLAN"
-log "provisioned $VOL_ID ($PLAN)"
-echo "$VOL_ID"
+log "creating '$VOL_NAME' ($BYTES bytes) via $XDEBBIE_URL"
+RESP=$(xd POST /volumes "$BODY") || die "xdebbied unreachable at $XDEBBIE_URL"
+xd_ok || die "xdebbied POST /volumes: $(xd_err "$RESP")"
+ID=$(echo "$RESP" | jq -r '.id // empty')
+[[ -n "$ID" ]] || die "no id in reply: $RESP"
+case "$XD_CODE" in
+  201) log "created $ID ($(echo "$RESP" | jq -r .bytes) bytes)" ;;
+  *)   log "'$VOL_NAME' already exists as $ID" ;;
+esac
+if PERF=$(echo "$RESP" | jq -er '.perf | "\(.write_mib_s) MiB/s, \(.write_iops) IOPS, \(.write_lat_ms) ms at bs=\(.bs)"' 2>/dev/null); then
+  log "perf for $ID: $PERF"
+fi
+echo "$RESP"

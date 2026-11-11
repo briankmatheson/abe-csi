@@ -16,7 +16,7 @@ spec:
       hostNetwork: true
       containers:
       - name: abe-csi
-        image: registry.internal.timesink.harlem.brianmatheson.com/abe-csi:latest
+        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.0
         args:
         - "--endpoint=unix:///csi/csi.sock"
         env:
@@ -24,6 +24,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: XDEBBIE_URL
+          valueFrom:
+            secretKeyRef: {name: abe-csi-xdebbie, key: url}
+        - name: XDEBBIE_TOKEN
+          valueFrom:
+            secretKeyRef: {name: abe-csi-xdebbie, key: token}
         securityContext:
           privileged: true
         volumeMounts:
@@ -32,13 +38,14 @@ spec:
         - name: mountpoint-dir
           mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
+        # The VM's /dev: hot-plugged virtio disks show up here, and
+        # cryptsetup/mount need the real device nodes.
         - name: dev
           mountPath: /dev
-        - name: modules
-          mountPath: /lib/modules
+        # SMBIOS product_uuid = our VM id in xdebbied.
+        - name: dmi
+          mountPath: /sys/class/dmi/id
           readOnly: true
-        - name: abe-state
-          mountPath: /var/lib/abe
       - name: csi-node-driver-registrar
         image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
         args:
@@ -65,10 +72,6 @@ spec:
       - name: dev
         hostPath:
           path: /dev
-      - name: modules
+      - name: dmi
         hostPath:
-          path: /lib/modules
-      - name: abe-state
-        hostPath:
-          path: /var/lib/abe-csi/node
-          type: DirectoryOrCreate
+          path: /sys/class/dmi/id

@@ -7,29 +7,20 @@ RUN cargo clean && cargo build --release
 # Same Debian release as the builder: a binary built against trixie glibc
 # does not run on bookworm.
 FROM debian:trixie-slim
-# Install dependencies including nvme-cli (with TLS support in trixie) and tlshd for NVMe/TCP TLS
-# Note: tlshd may need to be built from source or installed from backports if not in trixie
-RUN apt-get update && apt-get install -y \
+# No NVMe tooling: the hypervisor attaches volumes; this pod only sees virtio
+# disks and needs the pieces to encrypt, format and mount them.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
+    ca-certificates \
     curl \
     jq \
-    nvme-cli \
-    mdadm \
-    cryptsetup \
-    parted \
+    cryptsetup-bin \
     util-linux \
     e2fsprogs \
-    kmod \
     && rm -rf /var/lib/apt/lists/*
 
-# TODO: Install tlshd daemon for TLS handshake support
-# This may require building from source or using a backport
-# For now, add a placeholder config that will be used if tlshd is available
-RUN mkdir -p /etc/tlshd
-RUN mkdir -p /opt/bin /var/lib/abe
+RUN mkdir -p /opt/bin
 COPY --from=builder /usr/src/abe-csi/target/release/abe-csi-rs /opt/bin/abe-csi-rs
 COPY scripts/* /opt/bin/
-COPY config/tlshd.conf /etc/tlshd/tlshd.conf
-RUN chmod +x /opt/bin/* && ls -l /opt/bin
-EXPOSE 50051
+RUN chmod +x /opt/bin/*
 ENTRYPOINT ["/opt/bin/abe-csi-rs"]

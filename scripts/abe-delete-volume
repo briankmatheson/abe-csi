@@ -1,31 +1,19 @@
 #!/usr/bin/env bash
 # abe-delete-volume <volume_id>
 #
-# Release a volume: detach anything this host still has open, ask the ABE
-# host to unexport and remove the LV (DELETE /id/<id>), forget local state.
+# DELETE /v1/volumes/<id>: xdebbied unexports and removes it on ABE. Gone
+# already is fine; still attached (409) is an error so the provisioner
+# retries after the node has let go.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 need_root
-ensure_dirs
+require_cmds curl jq
 
 [[ $# -ge 1 ]] || { echo "usage: $0 <volume_id>" >&2; exit 2; }
 VOL_ID="$1"
-MAP=$(mapper_name "$VOL_ID")
 
-if [[ -e "/dev/mapper/$MAP" ]]; then
-  for mp in $(findmnt -S "/dev/mapper/$MAP" -n -o TARGET 2>/dev/null); do umount "$mp" || true; done
-  cryptsetup close "$MAP" || true
-fi
-if command -v nvme >/dev/null 2>&1 && is_connected "$VOL_ID"; then
-  nvme disconnect -n "$VOL_ID" >/dev/null || true
-fi
-
-if [[ -d "$ABE_VOL_DIR/$VOL_ID" ]]; then
-  HOST=$(cut -d: -f1 "$ABE_VOL_DIR/$VOL_ID/plan" 2>/dev/null || true)
-  [[ -n "$HOST" ]] || HOST=$(resolve_host) || die "no ABE host for $VOL_ID"
-  delete_host "$HOST" "$VOL_ID" || die "ABE DELETE /id/$VOL_ID failed on $HOST"
-  rm -rf "$ABE_VOL_DIR/$VOL_ID"
-  log "deleted $VOL_ID on $HOST"
-else
-  log "no state for $VOL_ID (nothing to do)"
-fi
+RESP=$(xd DELETE "/volumes/$VOL_ID") || die "xdebbied unreachable at $XDEBBIE_URL"
+case "$XD_CODE" in
+  2*|404) log "deleted $VOL_ID" ;;
+  *)      die "xdebbied DELETE /volumes/$VOL_ID: $(xd_err "$RESP")" ;;
+esac

@@ -16,14 +16,19 @@ spec:
       serviceAccountName: csi-controller-sa
       containers:
       - name: abe-csi
-        image: registry.internal.timesink.harlem.brianmatheson.com/abe-csi:latest
+        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.0
         args:
         - "--endpoint=unix:///csi/csi.sock"
+        env:
+        - name: XDEBBIE_URL
+          valueFrom:
+            secretKeyRef: {name: abe-csi-xdebbie, key: url}
+        - name: XDEBBIE_TOKEN
+          valueFrom:
+            secretKeyRef: {name: abe-csi-xdebbie, key: token}
         volumeMounts:
         - name: socket-dir
           mountPath: /csi
-        - name: abe-state
-          mountPath: /var/lib/abe
       - name: csi-provisioner
         image: registry.k8s.io/sig-storage/csi-provisioner:v5.0.1
         args:
@@ -42,8 +47,4 @@ spec:
       # controller and node processes fight over the same csi.sock.
       - name: socket-dir
         emptyDir: {}
-      - name: abe-state
-        hostPath:
-          path: /var/lib/abe-csi/controller
-          type: DirectoryOrCreate
 

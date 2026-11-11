@@ -44,9 +44,7 @@ impl proto::node_server::Node for NodeService {
             req.volume_context
         );
 
-        // abe-connect-and-mount <volume_id> <target_path> [KEY=VALUE...]
-        // volume_context carries PLAN=... from CreateVolume so this node can
-        // reconnect without sharing state with the controller pod.
+        // abe-attach-and-mount <volume_id> <target_path> [KEY=VALUE...]
         let mut args = vec![req.volume_id.clone(), req.target_path.clone()];
         args.extend(exec::kv_args(&req.volume_context));
 
@@ -66,17 +64,6 @@ impl proto::node_server::Node for NodeService {
             args.push(format!("MOUNT_OPTS={}", mount_opts.join(",")));
         }
 
-        // TLS PSK from the node-publish secret (tls-psk, psk, or tls-key)
-        // Passed via environment variable to avoid conflicts with LUKS stdin
-        let tls_psk = ["tls-psk", "psk", "tls-key"]
-            .iter()
-            .find_map(|k| req.secrets.get(*k))
-            .filter(|s| !s.is_empty())
-            .map(String::as_str);
-        if tls_psk.is_some() {
-            tracing::info!("NodePublishVolume {}: TLS PSK supplied", req.volume_id);
-        }
-        
         // LUKS passphrase from the node-publish secret (StorageClass
         // csi.storage.k8s.io/node-publish-secret-name). Piped to the script's
         // stdin; absent => volume is used unencrypted.
@@ -89,7 +76,7 @@ impl proto::node_server::Node for NodeService {
             tracing::info!("NodePublishVolume {}: LUKS passphrase supplied", req.volume_id);
         }
 
-        exec::run_with_secrets("abe-connect-and-mount", &args, passphrase, tls_psk)?;
+        exec::run_with_stdin("abe-attach-and-mount", &args, passphrase)?;
         tracing::info!("NodePublishVolume {} mounted", req.volume_id);
         Ok(Response::new(proto::NodePublishVolumeResponse {}))
     }
@@ -106,7 +93,7 @@ impl proto::node_server::Node for NodeService {
         }
         tracing::info!("NodeUnpublishVolume {} from {}", req.volume_id, req.target_path);
         exec::run(
-            "abe-unmount-and-disconnect",
+            "abe-unmount-and-detach",
             &[req.volume_id.clone(), req.target_path.clone()],
         )?;
         Ok(Response::new(proto::NodeUnpublishVolumeResponse {}))

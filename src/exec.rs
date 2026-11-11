@@ -18,22 +18,7 @@ pub fn run(script: &str, args: &[String]) -> Result<String, Status> {
 /// Like [`run`], but feeds `stdin` to the script and sets
 /// `ABE_LUKS_KEY_STDIN=1` so it knows to read it. Used for secrets, which
 /// must never appear in argv or the environment.
-pub fn run_with_stdin(
-    script: &str,
-    args: &[String],
-    stdin: Option<&str>,
-) -> Result<String, Status> {
-    run_with_secrets(script, args, stdin, None)
-}
-
-/// Like [`run_with_stdin`], but also supports passing TLS PSK via environment.
-/// Used when we need both LUKS (via stdin) and TLS secrets.
-pub fn run_with_secrets(
-    script: &str,
-    args: &[String],
-    stdin: Option<&str>,
-    tls_psk: Option<&str>,
-) -> Result<String, Status> {
+pub fn run_with_stdin(script: &str, args: &[String], stdin: Option<&str>) -> Result<String, Status> {
     let path = format!("{}/{}", SCRIPT_DIR, script);
     tracing::debug!("exec {} {:?}", path, args);
 
@@ -45,12 +30,6 @@ pub fn run_with_secrets(
         cmd.stdin(Stdio::piped()).env("ABE_LUKS_KEY_STDIN", "1");
     } else {
         cmd.stdin(Stdio::null());
-    }
-    
-    // Pass TLS PSK via environment variable if provided
-    // Note: This is still secure as the environment is only visible to the child process
-    if let Some(psk) = tls_psk {
-        cmd.env("ABE_TLS_PSK", psk);
     }
 
     let mut child = cmd

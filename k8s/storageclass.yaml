@@ -4,8 +4,9 @@ metadata:
   name: abe-csi-sc
 provisioner: abe.csi.briankmatheson
 parameters:
-  # ABE host(s). Single-host mode: the first entry is used.
-  hosts: "10.23.0.136"
+  # Optional: which hypervisor's ABE holds the volumes (xdebbied host name).
+  # Default: any healthy host with an ABE.
+  # host: timesink.harlem.bmath.nyc
   # LUKS passphrase for volumes of this class. Kubelet reads this Secret and
   # hands it to NodePublishVolume; the driver pipes `passphrase` to
   # cryptsetup on stdin. Remove both keys for unencrypted volumes.

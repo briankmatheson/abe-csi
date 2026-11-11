@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# abe-unmount-and-detach <volume_id> <target_path>
+#
+# Unmount one publish target. Only when no other mounts of the volume
+# remain on this node do we close the LUKS mapping and ask xdebbied to
+# unplug the disk (RWO still allows several pods on the same node).
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+need_root
+require_cmds curl jq cryptsetup findmnt umount
+
+[[ $# -ge 2 ]] || { echo "usage: $0 <volume_id> <target_path>" >&2; exit 2; }
+VOL_ID="$1"; TARGET="$2"
+MAP=$(mapper_name "$VOL_ID")
+DEV=$(guest_dev "$VOL_ID")
+DETACH_TIMEOUT=${ABE_DETACH_TIMEOUT:-30}
+
+if findmnt -M "$TARGET" >/dev/null 2>&1; then
+  umount "$TARGET"
+  log "unmounted $TARGET"
+fi
+rmdir "$TARGET" 2>/dev/null || true
+
+# Anything else still using this volume?
+SRC=""
+if [[ -e "/dev/mapper/$MAP" ]]; then
+  SRC="/dev/mapper/$MAP"
+elif [[ -b "$DEV" ]]; then
+  SRC="$DEV"
+fi
+if [[ -n "$SRC" ]] && findmnt -S "$SRC" >/dev/null 2>&1; then
+  log "$SRC still mounted elsewhere; leaving attached"; exit 0
+fi
+
+if [[ -e "/dev/mapper/$MAP" ]]; then
+  cryptsetup close "$MAP" && log "closed $MAP"
+fi
+
+RESP=$(xd POST "/volumes/$VOL_ID/detach") || die "xdebbied unreachable at $XDEBBIE_URL"
+case "$XD_CODE" in
+  2*)  log "asked xdebbied to detach $VOL_ID" ;;
+  404) log "$VOL_ID unknown to xdebbied (already deleted)"; exit 0 ;;
+  *)   die "xdebbied detach $VOL_ID: $(xd_err "$RESP")" ;;
+esac
+# Wait for the disk to go so a re-attach elsewhere is not refused; the
+# reconciler finishes it regardless, so a timeout is only a warning.
+deadline=$((SECONDS + DETACH_TIMEOUT))
+while [[ -b "$DEV" ]] && (( SECONDS < deadline )); do sleep 1; done
+if [[ -b "$DEV" ]]; then
+  log "WARNING: $DEV still present after ${DETACH_TIMEOUT}s; xdebbied will finish detaching"
+else
+  log "detached $VOL_ID"
+fi
