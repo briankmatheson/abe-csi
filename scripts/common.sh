@@ -148,3 +148,84 @@ is_connected() {
 }
 
 mapper_name() { echo "abe-$1"; }
+
+# ============================================================================
+# NVMe TLS Support Functions
+# ============================================================================
+
+# Check if kernel and nvme-cli support NVMe/TCP TLS (kernel 6.7+, nvme-cli 2.8+)
+check_nvme_tls_support() {
+  local kernel_ver major minor
+  kernel_ver=$(uname -r)
+  major=$(echo "$kernel_ver" | cut -d. -f1)
+  minor=$(echo "$kernel_ver" | cut -d. -f2)
+  
+  if [[ "$major" -lt 6 ]] || [[ "$major" -eq 6 && "$minor" -lt 7 ]]; then
+    log "WARNING: Kernel $kernel_ver < 6.7, NVMe TLS not supported"
+    return 1
+  fi
+  
+  if ! command -v nvme >/dev/null 2>&1; then
+    log "ERROR: nvme command not found"
+    return 1
+  fi
+  
+  # Check if nvme-cli supports TLS (gen-tls-key command available)
+  if ! nvme gen-tls-key --help &>/dev/null; then
+    log "WARNING: nvme-cli doesn't support TLS commands (need version 2.8+)"
+    return 1
+  fi
+  
+  return 0
+}
+
+# Import a TLS PSK into the .nvme keyring for a given subsystem NQN
+# Usage: import_tls_key <subsysnqn> <psk_base64> [identity]
+import_tls_key() {
+  local nqn="$1" psk_b64="$2" identity="${3:-}"
+  [[ -z "$identity" ]] && identity="$nqn"
+  
+  log "importing TLS PSK for NQN: $nqn"
+  
+  # Decode base64 PSK and import into .nvme keyring
+  # The PSK should be in the format that nvme gen-tls-key expects
+  local psk_raw
+  psk_raw=$(echo "$psk_b64" | base64 -d)
+  
+  # Generate/import key into kernel keyring
+  # nvme gen-tls-key can generate or we can use an existing key
+  # For PSK import, we use --import with the key data
+  if echo "$psk_raw" | nvme gen-tls-key --import --keyring=.nvme --subsysnqn="$nqn" 2>/dev/null; then
+    log "TLS key imported successfully for $nqn"
+    return 0
+  else
+    log "ERROR: failed to import TLS key for $nqn"
+    return 1
+  fi
+}
+
+# Check if a TLS key exists in the .nvme keyring for a subsystem
+# Usage: has_tls_key <subsysnqn>
+has_tls_key() {
+  local nqn="$1"
+  nvme check-tls-key --subsysnqn="$nqn" --keyring=.nvme &>/dev/null
+}
+
+# Generate a new TLS PSK and import it
+# Usage: generate_and_import_tls_key <subsysnqn>
+generate_tls_key() {
+  local nqn="$1"
+  log "generating TLS PSK for NQN: $nqn"
+  
+  # Generate a new key and import directly into the keyring
+  nvme gen-tls-key --subsysnqn="$nqn" --keyring=.nvme --insert
+}
+
+# Check if tlshd daemon is running
+check_tlshd() {
+  if ! pgrep -x tlshd >/dev/null 2>&1; then
+    log "WARNING: tlshd daemon not running - TLS handshake may fail"
+    return 1
+  fi
+  return 0
+}

@@ -28,6 +28,8 @@ StorageClass names the host (first entry used).
 
 ## Encryption
 
+### LUKS (At-Rest Encryption)
+
 Set `csi.storage.k8s.io/node-publish-secret-name/-namespace` on the
 StorageClass to a Secret with a `passphrase` key (see
 `k8s/luks-secret.example.yaml`). Kubelet passes the Secret to
@@ -38,6 +40,18 @@ LUKS2, mapped as `/dev/mapper/abe-<id>`.
 Omit the secret parameters for unencrypted volumes. A LUKS volume published
 without a passphrase, or a non-LUKS volume with data published *with* one,
 is refused rather than guessed at.
+
+### TLS (Transport Encryption)
+
+**New in v0.3.0**: NVMe/TCP connections can use in-kernel TLS 1.3 for
+encrypted transport (requires Linux kernel 6.7+, nvme-cli 2.8+, and tlshd).
+
+Set `tls: "true"` in the StorageClass parameters and provide a TLS PSK in
+the node-publish secret (key: `tls-psk`). See [TLS_README.md](TLS_README.md)
+for complete setup instructions.
+
+Defense in depth: combine both TLS (transport) and LUKS (at-rest) by
+including both `tls-psk` and `passphrase` in the same secret.
 
 ## Performance annotations
 

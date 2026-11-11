@@ -25,9 +25,31 @@ parse_kv "$@"
 FS_TYPE=${ABE_PARAM_FS_TYPE:-ext4}
 MOUNT_OPTS=${ABE_PARAM_MOUNT_OPTS:-defaults}
 
+# --- TLS configuration ----------------------------------------------------
+TLS_ENABLED=${ABE_PARAM_TLS:-false}
+TLS_PSK=""
+
+if [[ "$TLS_ENABLED" == "true" || "$TLS_ENABLED" == "1" ]]; then
+  if ! check_nvme_tls_support; then
+    log "WARNING: TLS requested but not supported, falling back to unencrypted"
+    TLS_ENABLED=false
+  else
+    # Check for tlshd daemon
+    check_tlshd || log "WARNING: tlshd not running, TLS may not work"
+    
+    # TLS PSK can come from environment variable (set by CSI driver from secret)
+    if [[ -n "${ABE_TLS_PSK:-}" ]]; then
+      TLS_PSK="$ABE_TLS_PSK"
+      log "TLS PSK provided via environment"
+    fi
+  fi
+fi
+
+# --- LUKS configuration ---------------------------------------------------
 LUKS_KEY=""
 if [[ "${ABE_LUKS_KEY_STDIN:-0}" == "1" ]]; then
   LUKS_KEY=$(cat)
+  log "LUKS passphrase provided via stdin"
 fi
 
 mkdir -p "$TARGET"
@@ -50,12 +72,31 @@ HOST=$(echo "$PLAN" | cut -d: -f1)
 # --- attach ---------------------------------------------------------------
 if ! is_connected "$VOL_ID"; then
   ensure_nvme_tcp
+  
+  # Import TLS key before connecting if TLS is enabled
+  if [[ "$TLS_ENABLED" == "true" && -n "$TLS_PSK" ]]; then
+    if ! has_tls_key "$VOL_ID"; then
+      import_tls_key "$VOL_ID" "$TLS_PSK" || die "failed to import TLS key"
+    else
+      log "TLS key already present for $VOL_ID"
+    fi
+  fi
+  
   # Ask ABE to (re)export; the port may have changed since provisioning.
   PLAN=$(refresh_host "$HOST" "$VOL_ID") || die "ABE /id/$VOL_ID failed on $HOST"
   persist_plan "$VOL_ID" "$PLAN"
   PORT=$(echo "$PLAN" | cut -d: -f2)
-  log "nvme connect -a $HOST -t tcp -s $PORT -n $VOL_ID"
-  nvme connect -a "$HOST" -t tcp -s "$PORT" -n "$VOL_ID"
+  
+  # Build nvme connect command with optional TLS
+  CONNECT_CMD="nvme connect -a $HOST -t tcp -s $PORT -n $VOL_ID"
+  if [[ "$TLS_ENABLED" == "true" ]]; then
+    CONNECT_CMD="$CONNECT_CMD --tls"
+    log "$CONNECT_CMD (with TLS 1.3)"
+  else
+    log "$CONNECT_CMD"
+  fi
+  
+  $CONNECT_CMD || die "nvme connect failed"
 fi
 DEV=$(wait_device "$VOL_ID") || die "device for $VOL_ID did not appear"
 log "attached $VOL_ID as $DEV"

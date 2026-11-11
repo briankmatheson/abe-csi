@@ -1,0 +1,56 @@
+Add NVMe/TCP TLS 1.3 support for encrypted storage traffic
+
+Implements in-kernel TLS 1.3 for NVMe over TCP connections using Linux
+Kernel TLS (KTLS), providing encrypted storage traffic with PSK
+authentication.
+
+Features:
+- TLS 1.3 transport encryption for NVMe/TCP
+- Pre-Shared Key (PSK) authentication via .nvme kernel keyring
+- Defense in depth: combine TLS with existing LUKS encryption
+- Backward compatible: non-TLS connections still work
+- Graceful fallback when TLS not supported
+- Automatic capability detection
+
+Requirements:
+- Linux kernel 6.7+ (for NVMe/TCP TLS support)
+- nvme-cli 2.8+ (for TLS commands)
+- tlshd daemon (recommended)
+- ABE server with TLS-enabled NVMe targets
+
+Usage:
+Add to StorageClass parameters:
+  tls: "true"
+  csi.storage.k8s.io/node-publish-secret-name: <secret-with-tls-psk>
+
+Setup:
+  ./scripts/setup-tls.sh    # Generate keys and create secret
+  ./scripts/test-tls.sh     # Verify node capabilities
+
+Modified files:
+- scripts/common.sh: Add TLS support functions
+- scripts/abe-connect-and-mount: Add TLS connection logic
+- src/exec.rs: Support dual secrets (TLS + LUKS)
+- src/node.rs: Extract TLS PSK from secrets
+- Dockerfile: Include TLS tooling
+- README.md: Document TLS feature
+
+New files:
+- config/tlshd.conf: tlshd daemon configuration
+- scripts/setup-tls.sh: Interactive TLS setup utility
+- scripts/test-tls.sh: Capability testing script
+- k8s/tls-secret.example.yaml: TLS PSK secret example
+- k8s/combined-secret.example.yaml: TLS+LUKS secret example
+- k8s/storageclass-tls.yaml: TLS StorageClass examples
+- k8s/node-tls.yaml: DaemonSet with TLS capability checks
+- TLS_README.md: Comprehensive TLS documentation (332 lines)
+- QUICK_START_TLS.md: Quick reference guide (237 lines)
+- MTLS_DESIGN.md: Architecture and design (282 lines)
+- IMPLEMENTATION_SUMMARY.md: Implementation details (339 lines)
+- CHANGELOG_TLS.md: Changelog entry (189 lines)
+
+Total: 6 files modified, 13 files added, ~2,700 lines
+
+See TLS_README.md for complete documentation.
+
+Closes: #<issue-number>

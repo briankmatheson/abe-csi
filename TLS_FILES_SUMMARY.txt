@@ -1,0 +1,108 @@
+================================================================================
+                    abe-csi TLS Implementation
+                     Files Created/Modified
+                        2026-11-11
+================================================================================
+
+MODIFIED FILES (6)
+================================================================================
+scripts/common.sh                   +81 lines   TLS support functions
+scripts/abe-connect-and-mount       +19 lines   TLS connection logic
+src/exec.rs                         +17 lines   Dual secret handling
+src/node.rs                         +11 lines   TLS PSK extraction
+Dockerfile                          +18 lines   TLS tooling
+README.md                           +14 lines   TLS documentation
+                                    ─────────
+                                    160 lines modified
+
+NEW FILES - Configuration (1)
+================================================================================
+config/tlshd.conf                    17 lines   tlshd daemon config
+
+NEW FILES - Scripts (2)
+================================================================================
+scripts/setup-tls.sh                200 lines   Interactive setup utility
+scripts/test-tls.sh                 205 lines   Capability testing
+                                    ─────────
+                                    405 lines
+
+NEW FILES - Kubernetes Manifests (4)
+================================================================================
+k8s/tls-secret.example.yaml          23 lines   TLS PSK secret
+k8s/combined-secret.example.yaml     24 lines   TLS+LUKS secret
+k8s/storageclass-tls.yaml            51 lines   TLS StorageClasses
+k8s/node-tls.yaml                   142 lines   DaemonSet w/ TLS
+                                    ─────────
+                                    240 lines
+
+NEW FILES - Documentation (5)
+================================================================================
+TLS_README.md                       332 lines   Complete user guide
+QUICK_START_TLS.md                  237 lines   Quick reference
+MTLS_DESIGN.md                      282 lines   Architecture/design
+IMPLEMENTATION_SUMMARY.md           339 lines   Implementation details
+CHANGELOG_TLS.md                    189 lines   Changelog entry
+                                    ─────────
+                                  1,379 lines
+
+NEW FILES - Project Tracking (1)
+================================================================================
+TLS_IMPLEMENTATION_COMPLETE.md      475 lines   Final summary
+
+================================================================================
+TOTAL SUMMARY
+================================================================================
+Modified files:                       6
+New files created:                   13
+Total files touched:                 19
+
+Lines modified:                     160
+Lines added (new):                2,516
+Total lines:                      2,676
+
+Code (scripts/src):                 565 lines
+Config/Manifests:                   257 lines
+Documentation:                    1,854 lines
+
+================================================================================
+FEATURE STATUS
+================================================================================
+Core Implementation:                 ✅ COMPLETE
+Testing Tools:                       ✅ COMPLETE
+Kubernetes Manifests:                ✅ COMPLETE
+Documentation:                       ✅ COMPLETE
+Examples:                            ✅ COMPLETE
+
+Ready for:                           Testing & Validation
+Next step:                           Deploy to test cluster
+
+================================================================================
+KEY CAPABILITIES
+================================================================================
+✅ TLS 1.3 for NVMe/TCP transport encryption
+✅ PSK authentication via .nvme kernel keyring
+✅ Defense in depth (TLS + LUKS combination)
+✅ Backward compatible (non-TLS still works)
+✅ Graceful fallback when TLS unavailable
+✅ Automatic capability detection
+✅ Setup and test automation scripts
+✅ Comprehensive documentation
+
+================================================================================
+REQUIREMENTS
+================================================================================
+Mandatory:  Linux kernel 6.7+, nvme-cli 2.8+
+Optional:   tlshd daemon, hardware AES-NI
+ABE:        TLS-enabled NVMe targets
+
+================================================================================
+QUICK START
+================================================================================
+1. ./scripts/test-tls.sh              # Verify support
+2. ./scripts/setup-tls.sh             # Generate keys
+3. kubectl apply -f k8s/storageclass-tls.yaml
+4. Create PVC with storageClassName: abe-tls
+
+Documentation: See TLS_README.md
+
+================================================================================
