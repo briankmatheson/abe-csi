@@ -15,6 +15,12 @@ Pod ──kubelet──> NodePublishVolume(secrets) ──> abe-connect-and-moun
                                                   └─ mount
 ```
 
+## Size
+
+The PVC request goes to ABE as `/configure?bytes=N`; ABE makes the LV that
+size rounded up to a whole MiB and reports it back (`bytes`), which the
+driver uses as the PV capacity. No expansion.
+
 ## Mode
 
 Single ABE host, one NVMe namespace per volume, no RAID. `hosts` in the

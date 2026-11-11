@@ -64,15 +64,19 @@ read_plan() { cat "$ABE_VOL_DIR/$1/plan"; }
 # to put on the PersistentVolume as annotations.
 # ABE runs fio for ABE_FIO_SECONDS before replying, so allow for it.
 configure_host() {
-  local host="$1" bytes="${2:-}" resp port id url perf
+  local host="$1" bytes="${2:-}" resp port id url made perf
   url="http://$host/configure"
   [[ -n "$bytes" && "$bytes" != 0 ]] && url="$url?bytes=$bytes"
   resp=$(curl --silent --fail --max-time 120 "$url") || return 1
   port=$(echo "$resp" | jq -r .port); id=$(echo "$resp" | jq -r .id)
   [[ -n "$port" && -n "$id" && "$port" != null && "$id" != null ]] || return 1
+  mkdir -p "$ABE_VOL_DIR/$id"
+  # ABE >= 0.3.2 reports the LV size it made (request rounded up to a MiB);
+  # the controller uses it as the PV capacity.
+  made=$(echo "$resp" | jq -r '.bytes // empty')
+  [[ -n "$made" ]] && echo "$made" > "$ABE_VOL_DIR/$id/bytes"
   perf=$(echo "$resp" | jq -c '.perf // empty')
   if [[ -n "$perf" ]]; then
-    mkdir -p "$ABE_VOL_DIR/$id"
     echo "$perf" > "$ABE_VOL_DIR/$id/perf"
     log "perf for $id: $(echo "$perf" | jq -r '"\(.write_mib_s) MiB/s, \(.write_iops) IOPS, \(.write_lat_ms) ms at bs=\(.bs)"')"
   fi

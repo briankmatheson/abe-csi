@@ -115,6 +115,16 @@ impl ControllerService {
             .map(|s| s.trim().to_string())
     }
 
+    /// Size of the LV ABE actually made (`volumes/<id>/bytes`, from the
+    /// /configure reply): the request rounded up to a whole MiB.
+    fn read_bytes(volume_id: &str) -> Option<i64> {
+        std::fs::read_to_string(format!("{}/volumes/{}/bytes", state_dir(), volume_id))
+            .ok()?
+            .trim()
+            .parse()
+            .ok()
+    }
+
     /// ABE's fio characterization of a freshly created volume, saved by
     /// abe-create-volume as `$ABE_STATE_DIR/volumes/<id>/perf`.
     fn read_perf(volume_id: &str) -> Option<Perf> {
@@ -220,14 +230,27 @@ impl proto::controller_server::Controller for ControllerService {
             ));
         }
 
+        // Report what ABE made, which is at least what was asked for.
+        let actual = Self::read_bytes(&volume_id).unwrap_or(capacity_bytes);
+        if actual < capacity_bytes {
+            return Err(Status::internal(format!(
+                "ABE made {} a {} byte volume, less than the {} requested",
+                volume_id, actual, capacity_bytes
+            )));
+        }
         let p = Provisioned {
             plan: Self::read_plan(&volume_id).unwrap_or_default(),
             volume_id,
-            capacity_bytes,
+            capacity_bytes: actual,
         };
         self.remember(&req.name, &p);
 
-        tracing::info!("CreateVolume '{}' -> {}", req.name, p.volume_id);
+        tracing::info!(
+            "CreateVolume '{}' -> {} ({} bytes)",
+            req.name,
+            p.volume_id,
+            p.capacity_bytes
+        );
         match Self::read_perf(&p.volume_id) {
             Some(perf) => Self::annotate_pv(&req.name, &p.volume_id, &perf),
             None => tracing::info!("no perf data for {} (fio off or missing on the ABE host)", p.volume_id),
