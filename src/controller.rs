@@ -148,7 +148,7 @@ impl proto::controller_server::Controller for ControllerService {
             return Err(Status::invalid_argument("volume_id is required"));
         }
         tracing::info!("DeleteVolume {}", req.volume_id);
-        exec::run("abe-delete-volume", &[req.volume_id.clone()])?;
+        exec::run("abe-delete-volume", std::slice::from_ref(&req.volume_id))?;
         Ok(Response::new(proto::DeleteVolumeResponse {}))
     }
 

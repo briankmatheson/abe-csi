@@ -1,9 +1,14 @@
+// tonic::Status is the gRPC error type; every CSI handler returns it as Err.
+#![allow(clippy::result_large_err)]
+
 use std::path::Path;
 use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::Server;
 
 mod csi {
+    // generated from the upstream CSI spec; its doc comments are not ours to fix
+    #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
     tonic::include_proto!("csi.v1");
 }
 mod controller;
@@ -52,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
 
     Server::builder()
         .add_service(csi::identity_server::IdentityServer::new(IdentityService::default()))
-        .add_service(csi::controller_server::ControllerServer::new(ControllerService::default()))
+        .add_service(csi::controller_server::ControllerServer::new(ControllerService))
         .add_service(csi::node_server::NodeServer::new(NodeService::default()))
         .serve_with_incoming(UnixListenerStream::new(uds))
         .await?;
