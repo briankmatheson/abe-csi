@@ -16,34 +16,31 @@ struct Created {
 }
 
 /// The `perf` object ABE returned when it made the volume (a short fio
-/// write test on the new LV), relayed by xdebbied.
+/// random-write test on the new LV: `bs` with `iodepth` in flight for
+/// `seconds`), relayed by xdebbied.
 #[derive(Clone, Debug, PartialEq, serde::Deserialize)]
 pub struct Perf {
     pub bs: String,
+    pub iodepth: u32,
     pub seconds: f64,
     pub write_mib_s: f64,
     pub write_iops: f64,
-    pub write_lat_ms: f64,
-    /// one 4k random write at a time, mean completion latency (ABE >= 0.3.4)
-    #[serde(default)]
-    pub lat_4k_us: Option<f64>,
+    /// mean completion latency, microseconds
+    pub write_lat_us: f64,
 }
 
 impl Perf {
     /// Only the numbers, keyed under the driver name.
     pub fn annotations(&self) -> BTreeMap<String, String> {
         let k = |s: &str| format!("{}/{}", DRIVER_NAME, s);
-        let mut a = BTreeMap::from([
+        BTreeMap::from([
             (k("fio-bs"), self.bs.clone()),
+            (k("fio-iodepth"), self.iodepth.to_string()),
             (k("fio-seconds"), fmt_num(self.seconds)),
             (k("write-mib-s"), fmt_num(self.write_mib_s)),
             (k("write-iops"), fmt_num(self.write_iops)),
-            (k("write-lat-ms"), fmt_num(self.write_lat_ms)),
-        ]);
-        if let Some(us) = self.lat_4k_us {
-            a.insert(k("lat-4k-us"), fmt_num(us));
-        }
-        a
+            (k("write-lat-us"), fmt_num(self.write_lat_us)),
+        ])
     }
 }
 
@@ -274,21 +271,16 @@ mod tests {
     #[test]
     fn perf_becomes_number_only_annotations() {
         let perf: Perf = serde_json::from_str(
-            r#"{"bs":"4M","seconds":5.0,"write_mib_s":412.5,"write_iops":103.12,"write_lat_ms":77.3,"lat_4k_us":187.46}"#,
+            r#"{"bs":"4k","iodepth":1,"seconds":5.0,"write_mib_s":19.53,"write_iops":5000.0,"write_lat_us":187.456}"#,
         )
         .unwrap();
         let a = perf.annotations();
-        assert_eq!(a["abe.csi/fio-bs"], "4M");
+        assert_eq!(a["abe.csi/fio-bs"], "4k");
+        assert_eq!(a["abe.csi/fio-iodepth"], "1");
         assert_eq!(a["abe.csi/fio-seconds"], "5");
-        assert_eq!(a["abe.csi/write-mib-s"], "412.5");
-        assert_eq!(a["abe.csi/write-iops"], "103.12");
-        assert_eq!(a["abe.csi/write-lat-ms"], "77.3");
-        assert_eq!(a["abe.csi/lat-4k-us"], "187.46");
-        // older ABEs do not send it; no annotation then
-        let old: Perf = serde_json::from_str(
-            r#"{"bs":"4M","seconds":5.0,"write_mib_s":1.0,"write_iops":1.0,"write_lat_ms":1.0}"#,
-        ).unwrap();
-        assert!(!old.annotations().contains_key("abe.csi/lat-4k-us"));
+        assert_eq!(a["abe.csi/write-mib-s"], "19.53");
+        assert_eq!(a["abe.csi/write-iops"], "5000");
+        assert_eq!(a["abe.csi/write-lat-us"], "187.46");
         assert_eq!(a.len(), 6);
     }
 
@@ -297,13 +289,13 @@ mod tests {
         let c: Created = serde_json::from_str(
             r#"{"id":"7c0a1b2c3d4e5f60718293a4b5c6d7e8","name":"pvc-x","server":"http://10.22.0.1:80",
                 "traddr":"10.22.0.1","port":"44002","bytes":5368709120,
-                "perf":{"bs":"4M","seconds":5.0,"write_mib_s":940.05,"write_iops":235.01,"write_lat_ms":33.04},
+                "perf":{"bs":"4k","iodepth":1,"seconds":5.0,"write_mib_s":19.53,"write_iops":5000.0,"write_lat_us":187.46},
                 "created":"2026-11-11T00:00:00Z","updated":"2026-11-11T00:00:00Z"}"#,
         )
         .unwrap();
         assert_eq!(c.id, "7c0a1b2c3d4e5f60718293a4b5c6d7e8");
         assert_eq!(c.bytes, 5 << 30);
-        assert_eq!(c.perf.unwrap().write_mib_s, 940.05);
+        assert_eq!(c.perf.unwrap().write_lat_us, 187.46);
         let no_perf: Created = serde_json::from_str(r#"{"id":"a","bytes":1}"#).unwrap();
         assert!(no_perf.perf.is_none());
     }

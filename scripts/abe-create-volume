@@ -32,7 +32,7 @@ case "$XD_CODE" in
   201) log "created $ID ($(echo "$RESP" | jq -r .bytes) bytes)" ;;
   *)   log "'$VOL_NAME' already exists as $ID" ;;
 esac
-if PERF=$(echo "$RESP" | jq -er '.perf | "\(.write_mib_s) MiB/s, \(.write_iops) IOPS, \(.write_lat_ms) ms at bs=\(.bs)"' 2>/dev/null); then
+if PERF=$(echo "$RESP" | jq -er '.perf | "\(.write_lat_us) us, \(.write_iops) IOPS, \(.write_mib_s) MiB/s at bs=\(.bs) iodepth=\(.iodepth)"' 2>/dev/null); then
   log "perf for $ID: $PERF"
 fi
 echo "$RESP"
