@@ -2,7 +2,7 @@ apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: abe-csi-sc
-provisioner: abe.csi.briankmatheson
+provisioner: abe.csi
 parameters:
   # Optional: which hypervisor's ABE holds the volumes (xdebbied host name).
   # Default: any healthy host with an ABE.

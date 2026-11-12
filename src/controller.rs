@@ -271,11 +271,11 @@ mod tests {
         )
         .unwrap();
         let a = perf.annotations();
-        assert_eq!(a["abe.csi.briankmatheson/fio-bs"], "4M");
-        assert_eq!(a["abe.csi.briankmatheson/fio-seconds"], "5");
-        assert_eq!(a["abe.csi.briankmatheson/write-mib-s"], "412.5");
-        assert_eq!(a["abe.csi.briankmatheson/write-iops"], "103.12");
-        assert_eq!(a["abe.csi.briankmatheson/write-lat-ms"], "77.3");
+        assert_eq!(a["abe.csi/fio-bs"], "4M");
+        assert_eq!(a["abe.csi/fio-seconds"], "5");
+        assert_eq!(a["abe.csi/write-mib-s"], "412.5");
+        assert_eq!(a["abe.csi/write-iops"], "103.12");
+        assert_eq!(a["abe.csi/write-lat-ms"], "77.3");
         assert_eq!(a.len(), 5);
     }
 

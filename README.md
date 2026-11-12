@@ -70,15 +70,15 @@ controller writes them onto the PersistentVolume as annotations once the
 provisioner has created it:
 
 ```
-abe.csi.briankmatheson/fio-bs: "4M"
-abe.csi.briankmatheson/fio-seconds: "5"
-abe.csi.briankmatheson/write-mib-s: "412.5"
-abe.csi.briankmatheson/write-iops: "103.12"
-abe.csi.briankmatheson/write-lat-ms: "77.3"
+abe.csi/fio-bs: "4M"
+abe.csi/fio-seconds: "5"
+abe.csi/write-mib-s: "412.5"
+abe.csi/write-iops: "103.12"
+abe.csi/write-lat-ms: "77.3"
 ```
 
 ```sh
-kubectl get pv -o custom-columns='PV:.metadata.name,MiB/s:.metadata.annotations.abe\.csi\.briankmatheson/write-mib-s,IOPS:.metadata.annotations.abe\.csi\.briankmatheson/write-iops'
+kubectl get pv -o custom-columns='PV:.metadata.name,MiB/s:.metadata.annotations.abe\.csi/write-mib-s,IOPS:.metadata.annotations.abe\.csi/write-iops'
 ```
 
 The PV is named after the CSI `CreateVolume` name, so the controller polls

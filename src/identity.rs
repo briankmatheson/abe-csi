@@ -1,7 +1,7 @@
 use crate::csi as proto;
 use tonic::{Request, Response, Status};
 
-pub const DRIVER_NAME: &str = "abe.csi.briankmatheson";
+pub const DRIVER_NAME: &str = "abe.csi";
 
 #[derive(Default)]
 pub struct IdentityService {}

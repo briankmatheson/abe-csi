@@ -50,7 +50,7 @@ spec:
         image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
         args:
         - "--csi-address=unix:///csi/csi.sock"
-        - "--kubelet-registration-path=/var/lib/kubelet/plugins/abe.csi.briankmatheson/csi.sock"
+        - "--kubelet-registration-path=/var/lib/kubelet/plugins/abe.csi/csi.sock"
         volumeMounts:
         - name: plugin-dir
           mountPath: /csi
@@ -59,7 +59,7 @@ spec:
       volumes:
       - name: plugin-dir
         hostPath:
-          path: /var/lib/kubelet/plugins/abe.csi.briankmatheson
+          path: /var/lib/kubelet/plugins/abe.csi
           type: DirectoryOrCreate
       - name: registration-dir
         hostPath:
