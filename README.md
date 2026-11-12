@@ -75,7 +75,13 @@ abe.csi/fio-seconds: "5"
 abe.csi/write-mib-s: "412.5"
 abe.csi/write-iops: "103.12"
 abe.csi/write-lat-ms: "77.3"
+abe.csi/lat-4k-us: "187.46"
 ```
+
+`write-*` come from the sequential run (`fio-bs`, 8 in flight), so
+`write-lat-ms` is a throughput figure in disguise (8/IOPS); `lat-4k-us`
+is the mean completion latency of a single 4k random write (ABE >= 0.3.4),
+the number to look at for latency-sensitive placement.
 
 ```sh
 kubectl get pv -o custom-columns='PV:.metadata.name,MiB/s:.metadata.annotations.abe\.csi/write-mib-s,IOPS:.metadata.annotations.abe\.csi/write-iops'
@@ -90,8 +96,8 @@ The provisioner's `--timeout` is 120s to leave room for the fio run.
 ## Deploy
 
 ```sh
-docker build -t registry.mesh.harlem.bmath.nyc/abe-csi:0.3.1 .
-docker push    registry.mesh.harlem.bmath.nyc/abe-csi:0.3.1
+docker build -t registry.mesh.harlem.bmath.nyc/abe-csi:0.3.2 .
+docker push    registry.mesh.harlem.bmath.nyc/abe-csi:0.3.2
 kubectl -n kube-system create secret generic abe-csi-xdebbie \
   --from-literal=url=http://10.23.0.1:7443 --from-literal=token="$XDEBBIE_TOKEN"
 kubectl -n kube-system create secret generic abe-luks --from-literal=passphrase="$(openssl rand -base64 48)"

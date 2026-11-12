@@ -24,19 +24,26 @@ pub struct Perf {
     pub write_mib_s: f64,
     pub write_iops: f64,
     pub write_lat_ms: f64,
+    /// one 4k random write at a time, mean completion latency (ABE >= 0.3.4)
+    #[serde(default)]
+    pub lat_4k_us: Option<f64>,
 }
 
 impl Perf {
     /// Only the numbers, keyed under the driver name.
     pub fn annotations(&self) -> BTreeMap<String, String> {
         let k = |s: &str| format!("{}/{}", DRIVER_NAME, s);
-        BTreeMap::from([
+        let mut a = BTreeMap::from([
             (k("fio-bs"), self.bs.clone()),
             (k("fio-seconds"), fmt_num(self.seconds)),
             (k("write-mib-s"), fmt_num(self.write_mib_s)),
             (k("write-iops"), fmt_num(self.write_iops)),
             (k("write-lat-ms"), fmt_num(self.write_lat_ms)),
-        ])
+        ]);
+        if let Some(us) = self.lat_4k_us {
+            a.insert(k("lat-4k-us"), fmt_num(us));
+        }
+        a
     }
 }
 
@@ -267,7 +274,7 @@ mod tests {
     #[test]
     fn perf_becomes_number_only_annotations() {
         let perf: Perf = serde_json::from_str(
-            r#"{"bs":"4M","seconds":5.0,"write_mib_s":412.5,"write_iops":103.12,"write_lat_ms":77.3}"#,
+            r#"{"bs":"4M","seconds":5.0,"write_mib_s":412.5,"write_iops":103.12,"write_lat_ms":77.3,"lat_4k_us":187.46}"#,
         )
         .unwrap();
         let a = perf.annotations();
@@ -276,7 +283,13 @@ mod tests {
         assert_eq!(a["abe.csi/write-mib-s"], "412.5");
         assert_eq!(a["abe.csi/write-iops"], "103.12");
         assert_eq!(a["abe.csi/write-lat-ms"], "77.3");
-        assert_eq!(a.len(), 5);
+        assert_eq!(a["abe.csi/lat-4k-us"], "187.46");
+        // older ABEs do not send it; no annotation then
+        let old: Perf = serde_json::from_str(
+            r#"{"bs":"4M","seconds":5.0,"write_mib_s":1.0,"write_iops":1.0,"write_lat_ms":1.0}"#,
+        ).unwrap();
+        assert!(!old.annotations().contains_key("abe.csi/lat-4k-us"));
+        assert_eq!(a.len(), 6);
     }
 
     #[test]

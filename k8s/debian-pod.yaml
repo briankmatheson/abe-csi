@@ -3,6 +3,11 @@ kind: Pod
 metadata:
   name: debian-test
 spec:
+  # single-node clusters only have a tainted control plane
+  tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
   containers:
   - name: debian
     image: debian:12-slim
@@ -13,4 +18,4 @@ spec:
   volumes:
   - name: data
     persistentVolumeClaim:
-      claimName: postgres-data
+      claimName: pgdata   # k8s/pvc.yaml
