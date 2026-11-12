@@ -12,7 +12,8 @@ require_cmds curl jq
 [[ $# -ge 1 ]] || { echo "usage: $0 <volume_id>" >&2; exit 2; }
 VOL_ID="$1"
 
-RESP=$(xd DELETE "/volumes/$VOL_ID") || die "xdebbied unreachable at $XDEBBIE_URL"
+xd DELETE "/volumes/$VOL_ID" || die "xdebbied unreachable at $XDEBBIE_URL"
+RESP=$XD_BODY
 case "$XD_CODE" in
   2*|404) log "deleted $VOL_ID" ;;
   *)      die "xdebbied DELETE /volumes/$VOL_ID: $(xd_err "$RESP")" ;;

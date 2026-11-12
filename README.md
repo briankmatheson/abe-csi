@@ -90,8 +90,8 @@ The provisioner's `--timeout` is 120s to leave room for the fio run.
 ## Deploy
 
 ```sh
-docker build -t registry.mesh.harlem.bmath.nyc/abe-csi:0.3.0 .
-docker push    registry.mesh.harlem.bmath.nyc/abe-csi:0.3.0
+docker build -t registry.mesh.harlem.bmath.nyc/abe-csi:0.3.1 .
+docker push    registry.mesh.harlem.bmath.nyc/abe-csi:0.3.1
 kubectl -n kube-system create secret generic abe-csi-xdebbie \
   --from-literal=url=http://10.23.0.1:7443 --from-literal=token="$XDEBBIE_TOKEN"
 kubectl -n kube-system create secret generic abe-luks --from-literal=passphrase="$(openssl rand -base64 48)"

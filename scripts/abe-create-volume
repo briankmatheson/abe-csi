@@ -23,7 +23,8 @@ BODY=$(jq -nc --arg n "$VOL_NAME" --argjson b "$BYTES" --arg h "${ABE_PARAM_HOST
   '{name: $n, bytes: $b} + (if $h != "" then {host: $h} else {} end)')
 
 log "creating '$VOL_NAME' ($BYTES bytes) via $XDEBBIE_URL"
-RESP=$(xd POST /volumes "$BODY") || die "xdebbied unreachable at $XDEBBIE_URL"
+xd POST /volumes "$BODY" || die "xdebbied unreachable at $XDEBBIE_URL"
+RESP=$XD_BODY
 xd_ok || die "xdebbied POST /volumes: $(xd_err "$RESP")"
 ID=$(echo "$RESP" | jq -r '.id // empty')
 [[ -n "$ID" ]] || die "no id in reply: $RESP"

@@ -14,9 +14,15 @@ spec:
         app: abe-csi-controller
     spec:
       serviceAccountName: csi-controller-sa
+      priorityClassName: system-cluster-critical
+      # Single-node clusters have only a tainted control plane
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
       containers:
       - name: abe-csi
-        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.0
+        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.1
         args:
         - "--endpoint=unix:///csi/csi.sock"
         env:

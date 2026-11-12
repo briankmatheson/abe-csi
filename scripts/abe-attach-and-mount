@@ -41,14 +41,16 @@ fi
 ME=$(vm_uuid)
 DEV=$(guest_dev "$VOL_ID")
 if [[ ! -b "$DEV" ]]; then
-  RESP=$(xd POST "/volumes/$VOL_ID/attach" "{\"vm\":\"$ME\"}") || die "xdebbied unreachable at $XDEBBIE_URL"
+  xd POST "/volumes/$VOL_ID/attach" "{\"vm\":\"$ME\"}" || die "xdebbied unreachable at $XDEBBIE_URL"
+  RESP=$XD_BODY
   xd_ok || die "xdebbied attach $VOL_ID -> $ME: $(xd_err "$RESP")"
   log "asked xdebbied to attach $VOL_ID to this vm ($ME)"
   deadline=$((SECONDS + ATTACH_TIMEOUT)); msg=""
   while [[ ! -b "$DEV" ]]; do
     (( SECONDS < deadline )) || die "$DEV did not appear within ${ATTACH_TIMEOUT}s${msg:+ (xdebbied: $msg)}"
     sleep 2
-    if RESP=$(XD_TIMEOUT=10 xd GET "/volumes/$VOL_ID") && xd_ok; then
+    if XD_TIMEOUT=10 xd GET "/volumes/$VOL_ID" && xd_ok; then
+      RESP=$XD_BODY
       msg=$(echo "$RESP" | jq -r '.message // empty')
       [[ -n "$msg" ]] && log "waiting: $msg"
     fi

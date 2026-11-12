@@ -43,18 +43,21 @@ parse_kv() {
 
 # --- xdebbied -------------------------------------------------------------
 
-# xd METHOD /path [json-body]  -> response body on stdout, status in XD_CODE.
+# xd METHOD /path [json-body]  -> response body in XD_BODY, status in XD_CODE.
 # Returns non-zero only when the request itself failed (no HTTP status).
+# Globals, not stdout: `RESP=$(xd ...)` would run xd in a subshell and the
+# caller would never see XD_CODE.
 XD_CODE=000
+XD_BODY=
 xd() {
   local m="$1" path="$2" body="${3:-}" out
   local args=(--silent --show-error --max-time "${XD_TIMEOUT:-120}" -X "$m"
               -H "Accept: application/json" -w $'\n%{http_code}')
   [[ -n "${XDEBBIE_TOKEN:-}" ]] && args+=(-H "Authorization: Bearer $XDEBBIE_TOKEN")
   [[ -n "$body" ]] && args+=(-H "Content-Type: application/json" --data "$body")
-  out=$(curl "${args[@]}" "$XDEBBIE_URL/v1$path") || { XD_CODE=000; return 1; }
+  out=$(curl "${args[@]}" "$XDEBBIE_URL/v1$path") || { XD_CODE=000; XD_BODY=; return 1; }
   XD_CODE=${out##*$'\n'}
-  printf '%s' "${out%$'\n'*}"
+  XD_BODY=${out%$'\n'*}
 }
 xd_ok() { [[ "$XD_CODE" == 2* ]]; }
 # "<code>: <error text>" for logs

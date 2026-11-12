@@ -36,7 +36,8 @@ if [[ -e "/dev/mapper/$MAP" ]]; then
   cryptsetup close "$MAP" && log "closed $MAP"
 fi
 
-RESP=$(xd POST "/volumes/$VOL_ID/detach") || die "xdebbied unreachable at $XDEBBIE_URL"
+xd POST "/volumes/$VOL_ID/detach" || die "xdebbied unreachable at $XDEBBIE_URL"
+RESP=$XD_BODY
 case "$XD_CODE" in
   2*)  log "asked xdebbied to detach $VOL_ID" ;;
   404) log "$VOL_ID unknown to xdebbied (already deleted)"; exit 0 ;;

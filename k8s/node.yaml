@@ -14,9 +14,13 @@ spec:
     spec:
       serviceAccountName: csi-node-sa
       hostNetwork: true
+      priorityClassName: system-node-critical
+      # Every node that can run a pod needs the node plugin, taints or not
+      tolerations:
+      - operator: Exists
       containers:
       - name: abe-csi
-        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.0
+        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.1
         args:
         - "--endpoint=unix:///csi/csi.sock"
         env:
