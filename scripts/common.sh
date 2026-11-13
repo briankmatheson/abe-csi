@@ -17,6 +17,10 @@ export DM_DISABLE_UDEV=1
 log() { echo "[abe][$(date +%H:%M:%S)] $*" >&2; }
 die() { log "$*"; exit 1; }
 
+# Exit code for "xdebbied answered 507: no ABE has room". The controller
+# (src/exec.rs) maps it to gRPC ResourceExhausted; everything else is 1.
+EXIT_NO_SPACE=28
+
 need_root() {
   if [[ ${EUID:-$(id -u)} -ne 0 ]]; then die "must run as root"; fi
 }

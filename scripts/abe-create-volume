@@ -25,6 +25,13 @@ BODY=$(jq -nc --arg n "$VOL_NAME" --argjson b "$BYTES" --arg h "${ABE_PARAM_HOST
 log "creating '$VOL_NAME' ($BYTES bytes) via $XDEBBIE_URL"
 xd POST /volumes "$BODY" || die "xdebbied unreachable at $XDEBBIE_URL"
 RESP=$XD_BODY
+if [[ "$XD_CODE" == 507 ]]; then
+  # No ABE has room for this volume. Exit 28 (not 1) so the controller can
+  # report ResourceExhausted on the PVC instead of an internal error; the
+  # last stderr line is xdebbied's message.
+  log "$(echo "$RESP" | jq -r '.error // .' 2>/dev/null | head -c 300)"
+  exit "$EXIT_NO_SPACE"
+fi
 xd_ok || die "xdebbied POST /volumes: $(xd_err "$RESP")"
 ID=$(echo "$RESP" | jq -r '.id // empty')
 [[ -n "$ID" ]] || die "no id in reply: $RESP"

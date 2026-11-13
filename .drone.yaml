@@ -9,6 +9,7 @@ steps:
       CARGO_TERM_COLOR: always
     commands:
       - apt-get update && apt-get install -y pkg-config libssl-dev protobuf-compiler curl jq
+      - tests/lint-links.sh
       - cargo build --release
       - mkdir -p dist
       - cp target/release/abe dist/

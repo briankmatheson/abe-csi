@@ -46,6 +46,12 @@ The PVC request becomes `bytes` in `POST /v1/volumes`; ABE makes the LV
 that size rounded up to a whole MiB and the driver reports what it made as
 the PV capacity. No expansion.
 
+When no ABE has room for the volume (xdebbied >= 0.15.0 answers 507),
+`CreateVolume` fails with `ResourceExhausted` and xdebbied's message, so
+the PVC's events say the storage is full instead of showing a generic
+internal error. The provisioner keeps retrying; the PVC binds once space
+is freed.
+
 ## Encryption
 
 Set `csi.storage.k8s.io/node-publish-secret-name/-namespace` on the
