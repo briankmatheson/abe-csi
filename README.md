@@ -33,9 +33,13 @@ unplugs a volume by itself if its VM is deleted.
 
 `kube-system/abe-csi-xdebbie` (see `k8s/xdebbie-secret.example.yaml`)
 holds `url` (xdebbied as seen from the VMs, normally the overlay gateway
-`http://10.23.0.1:7443`) and `token` (`XDEBBIE_TOKEN` from
-`/etc/xdebbie/xdebbie_env` on a hypervisor). Both pods take it as
-`XDEBBIE_URL` / `XDEBBIE_TOKEN`.
+`https://10.23.0.1:7443`), `token` (`XDEBBIE_TOKEN` from
+`/etc/xdebbie/xdebbie_env` on a hypervisor) and `ca` (the xdebbie API CA,
+`/etc/xdebbie/api-ca.pem` on a hypervisor, which signed xdebbied's
+certificate; xdebbied >= 0.16 serves https). Both pods take them as
+`XDEBBIE_URL` / `XDEBBIE_TOKEN` / `XDEBBIE_CA`; `XDEBBIE_CA` may be the PEM
+text or a path, and without it an https url is checked against the system
+roots only.
 
 StorageClass parameter `host` (optional) names the hypervisor whose ABE
 should hold the volumes; the default is any healthy host with one.
@@ -102,10 +106,11 @@ The provisioner's `--timeout` is 120s to leave room for the fio run.
 ## Deploy
 
 ```sh
-docker build -t registry.mesh.harlem.bmath.nyc/abe-csi:0.3.4 .
-docker push    registry.mesh.harlem.bmath.nyc/abe-csi:0.3.4
+docker build -t registry.mesh.harlem.bmath.nyc/abe-csi:0.3.5 .
+docker push    registry.mesh.harlem.bmath.nyc/abe-csi:0.3.5
 kubectl -n kube-system create secret generic abe-csi-xdebbie \
-  --from-literal=url=http://10.23.0.1:7443 --from-literal=token="$XDEBBIE_TOKEN"
+  --from-literal=url=https://10.23.0.1:7443 --from-literal=token="$XDEBBIE_TOKEN" \
+  --from-file=ca=/etc/xdebbie/api-ca.pem
 kubectl -n kube-system create secret generic abe-luks --from-literal=passphrase="$(openssl rand -base64 48)"
 kubectl apply -f k8s/rbac.yaml -f k8s/csi-driver.yaml -f k8s/controller.yaml -f k8s/node.yaml -f k8s/storageclass.yaml
 kubectl apply -f k8s/pvc.yaml -f k8s/debian-pod.yaml

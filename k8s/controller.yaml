@@ -22,7 +22,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: abe-csi
-        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.4
+        image: registry.mesh.harlem.bmath.nyc/abe-csi:0.3.5
         args:
         - "--endpoint=unix:///csi/csi.sock"
         env:
@@ -32,6 +32,9 @@ spec:
         - name: XDEBBIE_TOKEN
           valueFrom:
             secretKeyRef: {name: abe-csi-xdebbie, key: token}
+        - name: XDEBBIE_CA
+          valueFrom:
+            secretKeyRef: {name: abe-csi-xdebbie, key: ca, optional: true}
         volumeMounts:
         - name: socket-dir
           mountPath: /csi

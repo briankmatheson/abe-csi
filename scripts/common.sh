@@ -6,8 +6,8 @@
 # disks. This pod never speaks NVMe; it waits for /dev/disk/by-id/virtio-*.
 set -euo pipefail
 
-XDEBBIE_URL=${XDEBBIE_URL:-http://10.23.0.1:7443}
-# XDEBBIE_TOKEN comes from the abe-csi-xdebbie Secret.
+XDEBBIE_URL=${XDEBBIE_URL:-https://10.23.0.1:7443}
+# XDEBBIE_TOKEN and XDEBBIE_CA come from the abe-csi-xdebbie Secret.
 
 # libdevmapper waits for a udev cookie after creating a mapping; inside a
 # container the host's udev never acknowledges it and cryptsetup hangs.
@@ -16,6 +16,24 @@ export DM_DISABLE_UDEV=1
 
 log() { echo "[abe][$(date +%H:%M:%S)] $*" >&2; }
 die() { log "$*"; exit 1; }
+
+# XDEBBIE_CA is the xdebbie API CA that signed xdebbied's certificate: the
+# PEM itself (a Secret key lands in the environment as text) or a path.
+# Without it an https url is checked against the system roots, which do
+# not know the mesh CA, and every request fails the handshake.
+XD_CACERT=()
+if [[ -n "${XDEBBIE_CA:-}" ]]; then
+  if [[ "$XDEBBIE_CA" == -----BEGIN* ]]; then
+    XD_CA_FILE=$(mktemp /tmp/xdebbie-ca.XXXXXX)
+    printf '%s\n' "$XDEBBIE_CA" > "$XD_CA_FILE"
+  else
+    XD_CA_FILE=$XDEBBIE_CA
+    [[ -r "$XD_CA_FILE" ]] || die "XDEBBIE_CA $XD_CA_FILE: not readable"
+  fi
+  XD_CACERT=(--cacert "$XD_CA_FILE")
+elif [[ "$XDEBBIE_URL" == https://* ]]; then
+  log "XDEBBIE_CA unset: $XDEBBIE_URL is checked against the system roots only"
+fi
 
 # Exit code for "xdebbied answered 507: no ABE has room". The controller
 # (src/exec.rs) maps it to gRPC ResourceExhausted; everything else is 1.
@@ -56,7 +74,8 @@ XD_BODY=
 xd() {
   local m="$1" path="$2" body="${3:-}" out
   local args=(--silent --show-error --max-time "${XD_TIMEOUT:-120}" -X "$m"
-              -H "Accept: application/json" -w $'\n%{http_code}')
+              -H "Accept: application/json" -w $'\n%{http_code}'
+              ${XD_CACERT[@]+"${XD_CACERT[@]}"})
   [[ -n "${XDEBBIE_TOKEN:-}" ]] && args+=(-H "Authorization: Bearer $XDEBBIE_TOKEN")
   [[ -n "$body" ]] && args+=(-H "Content-Type: application/json" --data "$body")
   out=$(curl "${args[@]}" "$XDEBBIE_URL/v1$path") || { XD_CODE=000; XD_BODY=; return 1; }
