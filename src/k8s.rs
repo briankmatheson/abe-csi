@@ -34,8 +34,16 @@ impl Client {
             .timeout(Duration::from_secs(15))
             .build()?;
         // IPv6 service hosts need brackets.
-        let host = if host.contains(':') { format!("[{host}]") } else { host };
-        Ok(Self { base: format!("https://{host}:{port}"), token, http })
+        let host = if host.contains(':') {
+            format!("[{host}]")
+        } else {
+            host
+        };
+        Ok(Self {
+            base: format!("https://{host}:{port}"),
+            token,
+            http,
+        })
     }
 
     fn pv_url(&self, name: &str) -> String {
@@ -53,12 +61,19 @@ impl Client {
         match resp.status() {
             reqwest::StatusCode::NOT_FOUND => Ok(None),
             s if s.is_success() => Ok(Some(resp.json().await?)),
-            s => Err(anyhow!("GET pv/{name}: {s} {}", resp.text().await.unwrap_or_default())),
+            s => Err(anyhow!(
+                "GET pv/{name}: {s} {}",
+                resp.text().await.unwrap_or_default()
+            )),
         }
     }
 
     /// Merge-patch annotations onto a PV (adds/overwrites only the given keys).
-    pub async fn annotate_pv(&self, name: &str, annotations: &BTreeMap<String, String>) -> Result<()> {
+    pub async fn annotate_pv(
+        &self,
+        name: &str,
+        annotations: &BTreeMap<String, String>,
+    ) -> Result<()> {
         let body = json!({ "metadata": { "annotations": annotations } });
         let resp = self
             .http

@@ -21,7 +21,10 @@ impl Default for NodeService {
 }
 
 fn unimplemented<T>(what: &str) -> Result<Response<T>, Status> {
-    Err(Status::unimplemented(format!("{} is not supported by abe-csi", what)))
+    Err(Status::unimplemented(format!(
+        "{} is not supported by abe-csi",
+        what
+    )))
 }
 
 #[tonic::async_trait]
@@ -73,7 +76,10 @@ impl proto::node_server::Node for NodeService {
             .filter(|s| !s.is_empty())
             .map(String::as_str);
         if passphrase.is_some() {
-            tracing::info!("NodePublishVolume {}: LUKS passphrase supplied", req.volume_id);
+            tracing::info!(
+                "NodePublishVolume {}: LUKS passphrase supplied",
+                req.volume_id
+            );
         }
 
         exec::run_with_stdin("abe-attach-and-mount", &args, passphrase)?;
@@ -91,7 +97,11 @@ impl proto::node_server::Node for NodeService {
                 "volume_id and target_path are required",
             ));
         }
-        tracing::info!("NodeUnpublishVolume {} from {}", req.volume_id, req.target_path);
+        tracing::info!(
+            "NodeUnpublishVolume {} from {}",
+            req.volume_id,
+            req.target_path
+        );
         exec::run(
             "abe-unmount-and-detach",
             &[req.volume_id.clone(), req.target_path.clone()],

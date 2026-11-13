@@ -78,7 +78,10 @@ impl ControllerService {
 }
 
 fn unimplemented<T>(what: &str) -> Result<Response<T>, Status> {
-    Err(Status::unimplemented(format!("{} is not supported by abe-csi", what)))
+    Err(Status::unimplemented(format!(
+        "{} is not supported by abe-csi",
+        what
+    )))
 }
 
 #[tonic::async_trait]
@@ -112,7 +115,10 @@ impl proto::controller_server::Controller for ControllerService {
         }
         let out = exec::run("abe-create-volume", &args)?;
         let made: Created = serde_json::from_str(&out).map_err(|e| {
-            Status::internal(format!("abe-create-volume printed something odd ({}): {}", e, out))
+            Status::internal(format!(
+                "abe-create-volume printed something odd ({}): {}",
+                e, out
+            ))
         })?;
         if made.bytes < capacity_bytes {
             return Err(Status::internal(format!(
@@ -120,11 +126,19 @@ impl proto::controller_server::Controller for ControllerService {
                 made.id, made.bytes, capacity_bytes
             )));
         }
-        tracing::info!("CreateVolume '{}' -> {} ({} bytes)", req.name, made.id, made.bytes);
+        tracing::info!(
+            "CreateVolume '{}' -> {} ({} bytes)",
+            req.name,
+            made.id,
+            made.bytes
+        );
         // Re-armed on replays too: the PV may not have existed the first time.
         match &made.perf {
             Some(perf) => Self::annotate_pv(&req.name, &made.id, perf),
-            None => tracing::info!("no perf data for {} (fio off or missing on the ABE host)", made.id),
+            None => tracing::info!(
+                "no perf data for {} (fio off or missing on the ABE host)",
+                made.id
+            ),
         }
         let mut ctx = HashMap::new();
         ctx.insert("name".to_string(), req.name.clone());

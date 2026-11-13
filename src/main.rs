@@ -31,7 +31,13 @@ fn socket_path() -> String {
         .or_else(|| std::env::var("CSI_ENDPOINT").ok())
         .unwrap_or_else(|| "unix:///csi/csi.sock".into());
     raw.strip_prefix("unix://")
-        .map(|p| if p.starts_with('/') { p.to_string() } else { format!("/{}", p) })
+        .map(|p| {
+            if p.starts_with('/') {
+                p.to_string()
+            } else {
+                format!("/{}", p)
+            }
+        })
         .unwrap_or(raw)
 }
 
@@ -56,8 +62,12 @@ async fn main() -> anyhow::Result<()> {
     );
 
     Server::builder()
-        .add_service(csi::identity_server::IdentityServer::new(IdentityService::default()))
-        .add_service(csi::controller_server::ControllerServer::new(ControllerService))
+        .add_service(csi::identity_server::IdentityServer::new(
+            IdentityService::default(),
+        ))
+        .add_service(csi::controller_server::ControllerServer::new(
+            ControllerService,
+        ))
         .add_service(csi::node_server::NodeServer::new(NodeService::default()))
         .serve_with_incoming(UnixListenerStream::new(uds))
         .await?;

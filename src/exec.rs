@@ -18,14 +18,16 @@ pub fn run(script: &str, args: &[String]) -> Result<String, Status> {
 /// Like [`run`], but feeds `stdin` to the script and sets
 /// `ABE_LUKS_KEY_STDIN=1` so it knows to read it. Used for secrets, which
 /// must never appear in argv or the environment.
-pub fn run_with_stdin(script: &str, args: &[String], stdin: Option<&str>) -> Result<String, Status> {
+pub fn run_with_stdin(
+    script: &str,
+    args: &[String],
+    stdin: Option<&str>,
+) -> Result<String, Status> {
     let path = format!("{}/{}", SCRIPT_DIR, script);
     tracing::debug!("exec {} {:?}", path, args);
 
     let mut cmd = Command::new(&path);
-    cmd.args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
     if stdin.is_some() {
         cmd.stdin(Stdio::piped()).env("ABE_LUKS_KEY_STDIN", "1");
     } else {
