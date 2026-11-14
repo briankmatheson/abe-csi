@@ -19,3 +19,11 @@ serde_json = "1"
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[package.metadata.deb]
+name = "abe-csi"
+revision = "1"
+maintainer-scripts = "debian/"
+assets = [
+    ["target/release/abe-csi-rs", "usr/bin/abe-csi", "755"],
+]
